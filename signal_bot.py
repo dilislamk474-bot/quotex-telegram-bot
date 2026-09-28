@@ -1,34 +1,16 @@
-
 """
-Telegram M1 Signal Bot (lean version)
+Telegram M1 Signal Bot (lean version with Binance API Data)
 Install:  pip install python-telegram-bot aiohttp numpy matplotlib
 Run:      python signal_bot.py
 """
 import asyncio
 import datetime as dt
 import io
-import sqlite3
-from typing import Dict, List, Optional, Tuple
 import os
+import sqlite3
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
-
-
-class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
-
-  def do_GET(self):
-    self.send_response(200)
-    self.end_headers()
-    self.wfile.write(b"Bot is running!")
-
-
-def run_dummy_server():
-  port = int(os.environ.get("PORT", 8080))
-  server = HTTPServer(("0.0.0.0", port), SimpleHTTPRequestHandler)
-  server.serve_forever()
-
-
-threading.Thread(target=run_dummy_server, daemon=True).start()
+from typing import Dict, List, Optional, Tuple
 
 import aiohttp
 import matplotlib
@@ -38,15 +20,44 @@ import numpy as np
 from telegram import InlineKeyboardButton as B, InlineKeyboardMarkup as M, Update
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
 
+
+# ==================== DUMMY WEB SERVER FOR RENDER ====================
+class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is running successfully!")
+
+def run_dummy_server():
+    port = int(os.environ.get("PORT", 8080))
+    server = HTTPServer(("0.0.0.0", port), SimpleHTTPRequestHandler)
+    server.serve_forever()
+
+threading.Thread(target=run_dummy_server, daemon=True).start()
+
+
 # ==================== CONFIG ====================
 BOT_TOKEN = "8419845332:AAGtdmayLgS7uJNiKWnqL4YzsISyMicPsfQ"
 ADMIN_IDS = {6713482506: True}            # your Telegram user id(ASIFAJFX)
 DB_PATH = "bot.db"
-API_BASE = "https://quotexcandles.bdtraderpro.xyz/proversion/quotexcandles/Qx.php"
 FREE_LIMIT, PREMIUM_LIMIT = 5, 25
 MIN_SCORE = 3                      # |score| below this => NO TRADE
-PAIRS = ["EURUSD_otc", "GBPUSD_otc", "USDJPY_otc", "AUDUSD_otc", "USDCAD_otc",
-         "XAUUSD_otc", "BTCUSD_otc", "ETHUSD_otc", "USDBDT_otc", "USDINR_otc"]
+
+# Binance Pair Mapping (Crypto Pairs mapping)
+PAIR_MAPPING = {
+    "EURUSD_otc": "EURUSDT",
+    "GBPUSD_otc": "GBPUSDT",
+    "USDJPY_otc": "USDTJPY",
+    "AUDUSD_otc": "AUDUSDT",
+    "USDCAD_otc": "USDCAD",
+    "XAUUSD_otc": "PAXGUSDT",      # Gold proxy
+    "BTCUSD_otc": "BTCUSDT",
+    "ETHUSD_otc": "ETHUSDT",
+    "USDBDT_otc": "USDTBDT",
+    "USDINR_otc": "USDTINR"
+}
+
+PAIRS = list(PAIR_MAPPING.keys())
 
 busy: Dict[int, bool] = {}         # one live signal per user
 auto_tasks: Dict[int, asyncio.Task] = {}
@@ -146,14 +157,26 @@ def analyze(candles: List[dict]) -> Tuple[Optional[str], int, dict]:
     return direction, score, {"rsi": round(r, 1), "why": why}
 
 
-# ==================== DATA ====================
+# ==================== DATA (BINANCE API INTEGRATION) ====================
 async def fetch_candles(pair: str, count: int = 100) -> List[dict]:
-    url = f"{API_BASE}?pair={pair}&timeframe=M1&count={count}"
+    symbol = PAIR_MAPPING.get(pair, "BTCUSDT")
+    url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval=1m&limit={count}"
     try:
         async with aiohttp.ClientSession() as s:
-            async with s.get(url, timeout=aiohttp.ClientTimeout(total=12)) as r:
-                data = (await r.json(content_type=None)).get("data", [])
-        return sorted(data, key=lambda k: int(k.get("epoch", 0)))   # oldest -> newest
+            async with s.get(url, timeout=aiohttp.ClientTimeout(total=10)) as r:
+                if r.status != 200:
+                    return []
+                raw_data = await r.json()
+                candles = []
+                for k in raw_data:
+                    candles.append({
+                        "epoch": int(k[0] // 1000),
+                        "open": float(k[1]),
+                        "high": float(k[2]),
+                        "low": float(k[3]),
+                        "close": float(k[4])
+                    })
+                return candles
     except Exception as e:
         print("fetch error:", e)
         return []
