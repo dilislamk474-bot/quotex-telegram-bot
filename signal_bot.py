@@ -45,7 +45,7 @@ DB_PATH = "bot.db"
 FREE_LIMIT, PREMIUM_LIMIT = 5, 25
 
 # স্কোরের মান কমিয়ে ২ করা হলো যাতে সহজেই সিগন্যাল পাওয়া যায়
-MIN_SCORE = 2
+MIN_SCORE = 1
 
 # Bangladesh Timezone (UTC +6)
 BD_TZ = dt.timezone(dt.timedelta(hours=6))
