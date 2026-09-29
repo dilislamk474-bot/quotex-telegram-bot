@@ -1,5 +1,5 @@
 """
-Telegram M1 Signal Bot (Brazilian AI Pro Edition)
+Telegram M1 Signal Bot (Brazilian AI Pro Edition with Auto Push Notification)
 """
 import asyncio
 import datetime as dt
@@ -44,7 +44,7 @@ ADMIN_IDS = {6713482506: True}
 DB_PATH = "bot.db"
 FREE_LIMIT, PREMIUM_LIMIT = 5, 25
 
-MIN_SCORE = 2  # ফ্লেক্সিবল সিগন্যাল ফ্রিকোয়েন্সির জন্য
+MIN_SCORE = 3  # Auto push-er jonno optimum score 3 rakhle false signal kom ashbe
 BD_TZ = dt.timezone(dt.timedelta(hours=6))
 
 PAIR_MAPPING = {
@@ -190,9 +190,7 @@ def analyze(candles: List[dict]) -> Tuple[Optional[str], int, int, dict]:
         score -= 1; why.append("Upper Bollinger Band Drop")
 
     direction = "CALL" if score >= MIN_SCORE else "PUT" if score <= -MIN_SCORE else None
-    
-    # Calculate Brazilian AI style confidence (e.g., 75% to 92%)
-    base_conf = 72 + min(abs(score) * 6, 20)
+    base_conf = 75 + min(abs(score) * 6, 20)
 
     return direction, score, base_conf, {"rsi": round(r, 1), "why": why, "factors": factors}
 
@@ -264,12 +262,12 @@ def build_chart(candles: List[dict], pair: str, direction: str) -> io.BytesIO:
 
 # ==================== SIGNAL FLOW ====================
 def home_kb():
-    return M([[B("📊 সিগন্যাল পেয়ারসমূহ", callback_data="pairs_page_0"), B("🤖 অটো মোড", callback_data="auto")],
+    return M([[B("📊 সিগন্যাল পেয়ারসমূহ", callback_data="pairs_page_0"), B("🔔 অটো নোটিফিকেশন চালু", callback_data="auto")],
               [B("👤 প্রোফাইল", callback_data="profile")]])
 
 
 def stop_kb():
-    return M([[B("⏹ অটো বন্ধ করুন", callback_data="stop_auto")]])
+    return M([[B("⏹ অটো নোটিফিকেশন বন্ধ করুন", callback_data="stop_auto")]])
 
 
 async def run_signal(ctx: ContextTypes.DEFAULT_TYPE, chat_id: int, uid: int, pair: str,
@@ -280,13 +278,14 @@ async def run_signal(ctx: ContextTypes.DEFAULT_TYPE, chat_id: int, uid: int, pai
         clean_name = pair.replace("_otc", "").upper()
         
         if not candles:
-            await ctx.bot.send_message(chat_id, "❌ মার্কেট ডাটা পাওয়া যায়নি, আবার চেষ্টা করুন।", reply_markup=home_kb())
+            if not quiet_no_trade:
+                await ctx.bot.send_message(chat_id, "❌ মার্কেট ডাটা পাওয়া যায়নি।", reply_markup=home_kb())
             return False
             
         if direction is None:
             if not quiet_no_trade:
                 await ctx.bot.send_message(
-                    chat_id, f"⚪ {clean_name}: বাজারে এখন পরিষ্কার ট্রেন্ড নেই (স্কোর {score:+d})। অন্য পেয়ার ট্রাই করুন।",
+                    chat_id, f"⚪ {clean_name}: বাজারে এখন পরিষ্কার ট্রেন্ড নেই (স্কোর {score:+d})।",
                     reply_markup=home_kb())
             return False
 
@@ -308,17 +307,15 @@ async def run_signal(ctx: ContextTypes.DEFAULT_TYPE, chat_id: int, uid: int, pai
             f"{icon} DIRECTION ➜ {direction}\n"
             f"🎯 CONFIDENCE ➜ {conf}% {conf_blocks}\n"
             f"🏆 GRADE ➜ A · TREND\n"
-            f"🧠 CONFLUENCE ➜ {info['factors']}/17 factors · ⚡ 0 ticks\n"
+            f"🧠 CONFLUENCE ➜ {info['factors']}/17 factors\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"⚡ Live ticks unavailable — candle-only analysis\n"
             f"🧠 **WHY {direction}**\n"
             f"{why_text}\n"
-            f"⚠️ **RISK:** Volatility filter active. Follow proper money management.\n"
             f"⏳ Result is tracked automatically\n"
             f"🤖 👑 ELITE PRO"
         )
 
-        sent_msg = await ctx.bot.send_photo(
+        await ctx.bot.send_photo(
             chat_id, build_chart(candles, pair, direction),
             caption=caption_text, parse_mode="Markdown"
         )
@@ -329,7 +326,6 @@ async def run_signal(ctx: ContextTypes.DEFAULT_TYPE, chat_id: int, uid: int, pai
 
         res = await fetch_candles(pair, 5)
         if not res:
-            await ctx.bot.send_message(chat_id, "⚠️ ফলাফল চেক করার সময় ডাটা পাওয়া যায়নি।", reply_markup=home_kb())
             return True
 
         target = res[-1]
@@ -350,33 +346,32 @@ async def run_signal(ctx: ContextTypes.DEFAULT_TYPE, chat_id: int, uid: int, pai
         await ctx.bot.send_message(chat_id, result_caption, reply_markup=None if uid in auto_tasks else home_kb())
         return True
     finally:
-        busy.pop(uid, None)
+        pass
 
 
 async def auto_loop(ctx: ContextTypes.DEFAULT_TYPE, chat_id: int, uid: int):
     try:
+        await ctx.bot.send_message(chat_id, "🔔 অটো নোটিফিকেশন সিস্টেম চালু হয়েছে! বালো সুযোগ আসলে বট নিজেই সিগন্যাল পাঠাবে।", reply_markup=stop_kb())
         while True:
             user = get_user(uid)
             if user["daily"] >= limit_for(user):
-                await ctx.bot.send_message(chat_id, "❌ আজকের লিমিট শেষ, অটো মোড বন্ধ করা হলো।", reply_markup=home_kb())
+                await ctx.bot.send_message(chat_id, "❌ আজকের লিমিট শেষ, অটো নোটিফিকেশন বন্ধ করা হলো।", reply_markup=home_kb())
                 return
-            results = await asyncio.gather(*[fetch_candles(p) for p in PAIRS])
-            best = None
-            for p, cs in zip(PAIRS, results):
+            
+            # Shob pair sequentially scan korbe ebong bhalo setup khuje ber korbe
+            for p in PAIRS:
+                cs = await fetch_candles(p)
                 d, sc, _, _ = analyze(cs)
-                if d and (best is None or abs(sc) > abs(best[1])):
-                    best = (p, sc)
-            if not best:
-                await asyncio.sleep(45)
-                continue
-            busy[uid] = True
-            await run_signal(ctx, chat_id, uid, best[0], quiet_no_trade=True)
-            await asyncio.sleep(5)
+                if d:  # Jodi bhalo signal pawa jay
+                    await run_signal(ctx, chat_id, uid, p, quiet_no_trade=True)
+                    await asyncio.sleep(60)  # Ekti signal send korar por 1 minute gap dibe
+                await asyncio.sleep(5)
+            
+            await asyncio.sleep(30)
     except asyncio.CancelledError:
         raise
     finally:
         auto_tasks.pop(uid, None)
-        busy.pop(uid, None)
 
 
 # ==================== HANDLERS ====================
@@ -384,7 +379,7 @@ async def on_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     u = update.effective_user
     get_user(u.id, u.full_name)
     await update.message.reply_text(
-        "👋 স্বাগতম!\n🔥 **Brazilian Core AI** M1 সিগন্যাল বটে আপনাকে স্বাগতম।\n\n⚠️ ট্রেড করার আগে অবশ্যই ডেমো অ্যাকাউন্টে টেস্ট করে নিন।",
+        "👋 স্বাগতম!\n🔥 **Brazilian Core AI** M1 সিগন্যাল বটে আপনাকে স্বাগতম।\n\n🔔 'অটো নোটিফিকেশন চালু' বাটনে ক্লিক করলে বট ব্যাকগ্রাউন্ডে মার্কেট স্ক্যান করে নিজেই সিগন্যাল পাঠিয়ে দেবে!",
         parse_mode="Markdown", reply_markup=home_kb())
 
 
@@ -422,24 +417,23 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                                         text="🏠 প্রধান মেনু:", reply_markup=home_kb())
 
     elif q.data == "auto":
-        if busy.get(u.id) or u.id in auto_tasks:
-            await q.answer("⏳ আগের সিগন্যাল বা অটো শেষ হওয়া পর্যন্ত অপেক্ষা করুন", show_alert=True)
+        if u.id in auto_tasks:
+            await q.answer("অটো নোটিফিকেশন ইতিমধ্যে চালু আছে!", show_alert=True)
             return
         if user["daily"] >= limit_for(user):
             await ctx.bot.send_message(chat_id, "❌ আজকের লিমিট শেষ।")
             return
-        await ctx.bot.send_message(chat_id, "🤖 অটো মোড চালু করা হয়েছে...", reply_markup=stop_kb())
         auto_tasks[u.id] = asyncio.create_task(auto_loop(ctx, chat_id, u.id))
 
     elif q.data == "stop_auto":
         t = auto_tasks.pop(u.id, None)
         if t:
             t.cancel()
-        await ctx.bot.send_message(chat_id, "⏹ অটো মোড বন্ধ করা হয়েছে", reply_markup=home_kb())
+        await ctx.bot.send_message(chat_id, "⏹ অটো নোটিফিকেশন বন্ধ করা হয়েছে", reply_markup=home_kb())
 
     elif q.data.startswith("p_"):
         if u.id in auto_tasks:
-            await q.answer("⏹ আগে অটো মোড বন্ধ করুন", show_alert=True)
+            await q.answer("⏹ আগে অটো নোটিফিকেশন বন্ধ করুন", show_alert=True)
             return
         if busy.get(u.id):
             await q.answer("⏳ আগের সিগন্যালের ফলাফল আসা পর্যন্ত অপেক্ষা করুন", show_alert=True)
@@ -449,7 +443,8 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             return
         busy[u.id] = True
         await ctx.bot.send_message(chat_id, "🔍 Brazilian AI ইঞ্জিন দ্বারা সিগন্যাল বিশ্লেষণ করা হচ্ছে...")
-        asyncio.create_task(run_signal(ctx, chat_id, u.id, q.data[2:]))
+        await run_signal(ctx, chat_id, u.id, q.data[2:])
+        busy.pop(u.id, None)
 
     elif q.data == "profile":
         t = user["wins"] + user["losses"]
@@ -478,8 +473,9 @@ async def on_addpremium(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 
 async def on_users(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id not in ADMIN_IDS:
-        return
+    if update.effective_user.id not in ADMIN_NETWORKS if hasattr(ctx, 'NETWORKS') else ADMIN_IDS:
+        if update.effective_user.id not in ADMIN_IDS:
+            return
     with db() as c:
         n = c.execute("SELECT COUNT(*) FROM users").fetchone()[0]
     await update.message.reply_text(f"👥 মোট ব্যবহারকারী: {n}")
@@ -497,7 +493,7 @@ def main():
         for t in list(auto_tasks.values()):
             t.cancel()
     app.post_shutdown = on_shutdown
-    print("✅ Brazilian Core AI Bot started successfully")
+    print("✅ Brazilian Core AI Bot with Auto Push started successfully")
     app.run_polling(drop_pending_updates=True)
 
 
