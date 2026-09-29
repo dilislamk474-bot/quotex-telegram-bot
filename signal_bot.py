@@ -1,5 +1,5 @@
 """
-Telegram M1 Signal Bot (All Pairs & OTC Mapped Version)
+Telegram M1 Signal Bot (Render Port Fixed & All Pairs Version)
 Install:  pip install python-telegram-bot aiohttp numpy matplotlib yfinance
 Run:      python signal_bot.py
 """
@@ -21,16 +21,20 @@ from telegram import InlineKeyboardButton as B, InlineKeyboardMarkup as M, Updat
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
 
 
-# ==================== DUMMY WEB SERVER FOR RENDER ====================
+# ==================== ROBUST WEB SERVER FOR RENDER PORT ====================
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
+        self.send_header("Content-type", "text/html")
         self.end_headers()
-        self.wfile.write(b"Bot is running successfully!")
+        self.wfile.write(b"<html><body><h1>Bot is running successfully!</h1></body></html>")
+    def log_message(self, format, *args):
+        return
 
 def run_dummy_server():
-    port = int(os.environ.get("PORT", 8080))
+    port = int(os.environ.get("PORT", 10000))
     server = HTTPServer(("0.0.0.0", port), SimpleHTTPRequestHandler)
+    print(f"Dummy web server running on port {port}")
     server.serve_forever()
 
 threading.Thread(target=run_dummy_server, daemon=True).start()
@@ -46,9 +50,7 @@ MIN_SCORE = 4
 # Bangladesh Timezone (UTC +6)
 BD_TZ = dt.timezone(dt.timedelta(hours=6))
 
-# সকল পেয়ার এবং Yahoo Finance সিম্বল ম্যাপিং (নরমাল ও OTC উভয় সংস্করণ সহ)
 PAIR_MAPPING = {
-    # Forex Majors & Minors (OTC & Normal)
     "EURUSD_otc": "EURUSD=X", "EURUSD": "EURUSD=X",
     "GBPUSD_otc": "GBPUSD=X", "GBPUSD": "GBPUSD=X",
     "USDJPY_otc": "USDJPY=X", "USDJPY": "USDJPY=X",
@@ -77,14 +79,10 @@ PAIR_MAPPING = {
     "NZDCAD_otc": "NZDCAD=X", "NZDCAD": "NZDCAD=X",
     "NZDCHF_otc": "NZDCHF=X", "NZDCHF": "NZDCHF=X",
     "NZDJPY_otc": "NZDJPY=X", "NZDJPY": "NZDJPY=X",
-
-    # Commodities & Metals
     "XAUUSD_otc": "GC=F", "XAUUSD": "GC=F",
     "XAG_USD_otc": "SI=F", "XAG_USD": "SI=F",
     "USCRUDE_otc": "CL=F", "USCRUDE": "CL=F",
     "UKBRENT_otc": "BZ=F", "UKBRENT": "BZ=F",
-
-    # Indices & Stocks
     "US100_otc": "^NDX", "US100": "^NDX",
     "US500_otc": "^GSPC", "US500": "^GSPC",
     "AAPL": "AAPL", "BA": "BA", "MSFT": "MSFT",
@@ -93,7 +91,7 @@ PAIR_MAPPING = {
 
 PAIRS = list(PAIR_MAPPING.keys())
 
-busy: Dict[int, bool] {}
+busy: Dict[int, bool] = {}
 auto_tasks: Dict[int, asyncio.Task] = {}
 
 
@@ -348,7 +346,7 @@ async def on_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     u = update.effective_user
     get_user(u.id, u.full_name)
     await update.message.reply_text(
-        "👋 স্বাগতম!\nসম্পূর্ণ পেয়ার ও OTC সমর্থित M1 সিগন্যাল বটে।\n\n⚠️ ট্রেড করার আগে অবশ্যই ডেমো অ্যাকাউন্টে টেস্ট করে নিন।", reply_markup=home_kb())
+        "👋 স্বাগতম!\nসম্পূর্ণ পেয়ার ও OTC সমর্থিত M1 সিগন্যাল বটে।\n\n⚠️ ট্রেড করার আগে অবশ্যই ডেমো অ্যাকাউন্টে টেস্ট করে নিন।", reply_markup=home_kb())
 
 
 async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
