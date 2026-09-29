@@ -1,5 +1,5 @@
 """
-Telegram M1 Signal Bot (Yahoo Finance API & BD Timezone version)
+Telegram M1 Signal Bot (All Pairs & OTC Mapped Version)
 Install:  pip install python-telegram-bot aiohttp numpy matplotlib yfinance
 Run:      python signal_bot.py
 """
@@ -41,28 +41,59 @@ BOT_TOKEN = "8419845332:AAGtdmayLgS7uJNiKWnqL4YzsISyMicPsfQ"
 ADMIN_IDS = {6713482506: True}
 DB_PATH = "bot.db"
 FREE_LIMIT, PREMIUM_LIMIT = 5, 25
-MIN_SCORE = 3
+MIN_SCORE = 4
 
 # Bangladesh Timezone (UTC +6)
 BD_TZ = dt.timezone(dt.timedelta(hours=6))
 
-# Yahoo Finance Symbol Mapping
+# সকল পেয়ার এবং Yahoo Finance সিম্বল ম্যাপিং (নরমাল ও OTC উভয় সংস্করণ সহ)
 PAIR_MAPPING = {
-    "EURUSD_otc": "EURUSD=X",
-    "GBPUSD_otc": "GBPUSD=X",
-    "USDJPY_otc": "USDJPY=X",
-    "AUDUSD_otc": "AUDUSD=X",
-    "USDCAD_otc": "USDCAD=X",
-    "XAUUSD_otc": "GC=F",          # Gold Futures
-    "BTCUSD_otc": "BTC-USD",
-    "ETHUSD_otc": "ETH-USD",
-    "USDBDT_otc": "USDBDT=X",
-    "USDINR_otc": "USDINR=X"
+    # Forex Majors & Minors (OTC & Normal)
+    "EURUSD_otc": "EURUSD=X", "EURUSD": "EURUSD=X",
+    "GBPUSD_otc": "GBPUSD=X", "GBPUSD": "GBPUSD=X",
+    "USDJPY_otc": "USDJPY=X", "USDJPY": "USDJPY=X",
+    "AUDUSD_otc": "AUDUSD=X", "AUDUSD": "AUDUSD=X",
+    "USDCAD_otc": "USDCAD=X", "USDCAD": "USDCAD=X",
+    "USDCHF_otc": "USDCHF=X", "USDCHF": "USDCHF=X",
+    "NZDUSD_otc": "NZDUSD=X", "NZDUSD": "NZDUSD=X",
+    "EURGBP_otc": "EURGBP=X", "EURGBP": "EURGBP=X",
+    "EURJPY_otc": "EURJPY=X", "EURJPY": "EURJPY=X",
+    "GBPJPY_otc": "GBPJPY=X", "GBPJPY": "GBPJPY=X",
+    "EURAUD_otc": "EURAUD=X", "EURAUD": "EURAUD=X",
+    "EURCAD_otc": "EURCAD=X", "EURCAD": "EURCAD=X",
+    "EURCHF_otc": "EURCHF=X", "EURCHF": "EURCHF=X",
+    "EURNZD_otc": "EURNZD=X", "EURNZD": "EURNZD=X",
+    "GBPAUD_otc": "GBPAUD=X", "GBPAUD": "GBPAUD=X",
+    "GBPCAD_otc": "GBPCAD=X", "GBPCAD": "GBPCAD=X",
+    "GBPCHF_otc": "GBPCHF=X", "GBPCHF": "GBPCHF=X",
+    "GBPNZD_otc": "GBPNZD=X", "GBPNZD": "GBPNZD=X",
+    "AUDCAD_otc": "AUDCAD=X", "AUDCAD": "AUDCAD=X",
+    "AUDCHF_otc": "AUDCHF=X", "AUDCHF": "AUDCHF=X",
+    "AUDJPY_otc": "AUDJPY=X", "AUDJPY": "AUDJPY=X",
+    "AUDNZD_otc": "AUDNZD=X", "AUDNZD": "AUDNZD=X",
+    "CADCHF_otc": "CADCHF=X", "CADCHF": "CADCHF=X",
+    "CADJPY_otc": "CADJPY=X", "CADJPY": "CADJPY=X",
+    "CHFJPY_otc": "CHFJPY=X", "CHFJPY": "CHFJPY=X",
+    "NZDCAD_otc": "NZDCAD=X", "NZDCAD": "NZDCAD=X",
+    "NZDCHF_otc": "NZDCHF=X", "NZDCHF": "NZDCHF=X",
+    "NZDJPY_otc": "NZDJPY=X", "NZDJPY": "NZDJPY=X",
+
+    # Commodities & Metals
+    "XAUUSD_otc": "GC=F", "XAUUSD": "GC=F",
+    "XAG_USD_otc": "SI=F", "XAG_USD": "SI=F",
+    "USCRUDE_otc": "CL=F", "USCRUDE": "CL=F",
+    "UKBRENT_otc": "BZ=F", "UKBRENT": "BZ=F",
+
+    # Indices & Stocks
+    "US100_otc": "^NDX", "US100": "^NDX",
+    "US500_otc": "^GSPC", "US500": "^GSPC",
+    "AAPL": "AAPL", "BA": "BA", "MSFT": "MSFT",
+    "PFE": "PFE", "META": "META", "JNJ": "JNJ"
 }
 
 PAIRS = list(PAIR_MAPPING.keys())
 
-busy: Dict[int, bool] = {}
+busy: Dict[int, bool] {}
 auto_tasks: Dict[int, asyncio.Task] = {}
 
 
@@ -139,22 +170,25 @@ def analyze(candles: List[dict]) -> Tuple[Optional[str], int, dict]:
     price = c[-1]
 
     score, why = 0, []
-    if e8 > e21 > e50:
-        score += 2; why.append("EMA uptrend")
-    elif e8 < e21 < e50:
-        score -= 2; why.append("EMA downtrend")
+    if e8 > e21 and e21 > e50:
+        score += 2; why.append("EMA Strong Uptrend")
+    elif e8 < e21 and e21 < e50:
+        score -= 2; why.append("EMA Strong Downtrend")
+    
     if hist > 0:
         score += 1; why.append("MACD +")
     elif hist < 0:
         score -= 1; why.append("MACD -")
-    if r < 30:
-        score += 1; why.append(f"RSI {r:.0f} oversold")
-    elif r > 70:
-        score -= 1; why.append(f"RSI {r:.0f} overbought")
+
+    if r < 28:
+        score += 2; why.append(f"RSI {r:.0f} Oversold")
+    elif r > 72:
+        score -= 2; why.append(f"RSI {r:.0f} Overbought")
+
     if price <= mid - 2 * sd:
-        score += 1; why.append("Lower BB")
+        score += 1; why.append("Lower BB Bounce")
     elif price >= mid + 2 * sd:
-        score -= 1; why.append("Upper BB")
+        score -= 1; why.append("Upper BB Drop")
 
     direction = "CALL" if score >= MIN_SCORE else "PUT" if score <= -MIN_SCORE else None
     return direction, score, {"rsi": round(r, 1), "why": why}
@@ -217,7 +251,7 @@ def build_chart(candles: List[dict], pair: str, direction: str) -> io.BytesIO:
                 color=arrow_col, fontsize=13, fontweight="bold",
                 arrowprops=dict(arrowstyle="->", color=arrow_col))
     ax.set_xlim(-1, len(data) + 6)
-    ax.set_title(f"{pair.replace('_otc', '')} OTC  M1", color="white")
+    ax.set_title(f"{pair.replace('_otc', '')} M1", color="white")
     ax.tick_params(colors="#8b949e"); ax.legend(facecolor="#161b22", labelcolor="white", loc="upper left")
     for sp in ax.spines.values():
         sp.set_color("#30363d")
@@ -227,7 +261,7 @@ def build_chart(candles: List[dict], pair: str, direction: str) -> io.BytesIO:
 
 # ==================== SIGNAL FLOW ====================
 def home_kb():
-    return M([[B("📊 নতুন সিগন্যাল", callback_data="pairs"), B("🤖 অটো মোড", callback_data="auto")],
+    return M([[B("📊 সিগন্যাল পেয়ারসমূহ", callback_data="pairs_page_0"), B("🤖 অটো মোড", callback_data="auto")],
               [B("👤 প্রোফাইল", callback_data="profile")]])
 
 
@@ -247,39 +281,37 @@ async def run_signal(ctx: ContextTypes.DEFAULT_TYPE, chat_id: int, uid: int, pai
         if direction is None:
             if not quiet_no_trade:
                 await ctx.bot.send_message(
-                    chat_id, f"⚪ {name}: ট্রেড করার মতো পরিষ্কার পরিস্থিতি নেই (স্কোর {score:+d})। অন্য পেয়ার চেষ্টা করুন।",
+                    chat_id, f"⚪ {name}: বাজারে এখন পরিষ্কার ট্রেন্ড নেই (স্কোর {score:+d})। অন্য পেয়ার ট্রাই করুন।",
                     reply_markup=home_kb())
             return False
 
-        # বাংলাদেশ সময় অনুযায়ী এন্ট্রি টাইম নির্ধারণ
         now_bd = dt.datetime.now(BD_TZ)
         entry = (now_bd + dt.timedelta(minutes=1)).replace(second=0, microsecond=0)
         use_signal(uid)
         icon = "🟢" if direction == "CALL" else "🔴"
         await ctx.bot.send_photo(
             chat_id, build_chart(candles, pair, direction),
-            caption=f"{icon} {name} OTC — {direction}\n"
+            caption=f"{icon} {name} — {direction}\n"
             f"⏰ এন্ট্রি সময়: {entry.strftime('%H:%M')} | মেয়াদ: M1\n"
-            f"📊 সিগন্যাল শক্তি: {abs(score)}/5\n"
-            f"📈 RSI {info['rsi']} | {', '.join(info['why'])}\n\n⏳ ফলাফল চেক করা হচ্ছে...")
+            f"📊 সিগন্যাল শক্তি: {abs(score)}/6\n"
+            f"📈 RSI {info['rsi']} | {', '.join(info['why'])}\n\n⏳ ফলাফল দেখার জন্য অপেক্ষা করা হচ্ছে...")
 
-        # নির্দিষ্ট এন্ট্রি সময় পর্যন্ত অপেক্ষা করা
-        wait_seconds = (entry - dt.datetime.now(BD_TZ)).total_seconds()
+        wait_seconds = (entry - dt.datetime.now(BD_TZ)).total_seconds() + 65
         if wait_seconds > 0:
             await asyncio.sleep(wait_seconds)
 
-        await asyncio.sleep(68)  # ক্যান্ডেল ক্লোজ হওয়ার জন্য অতিরিক্ত সময়
-
-        res = await fetch_candles(pair, 10)
-        target = next((k for k in res if abs(int(k["epoch"]) - int(entry.timestamp())) <= 30), None)
-        if not target:
-            await ctx.bot.send_message(chat_id, "⚠️ ফলাফল ক্যান্ডেল পাওয়া যায়নি।", reply_markup=home_kb())
+        res = await fetch_candles(pair, 5)
+        if not res:
+            await ctx.bot.send_message(chat_id, "⚠️ ফলাফল চেক করার সময় ডাটা পাওয়া যায়নি।", reply_markup=home_kb())
             return True
+
+        target = res[-1]
         o, cl = float(target["open"]), float(target["close"])
         win = cl > o if direction == "CALL" else cl < o
         add_result(uid, win)
+        
         await ctx.bot.send_message(chat_id, f"{'✅ WIN (জিতেছে)' if win else '❌ LOSS (হেরেছে)'} — {name} {direction}\n"
-                                            f"ওপেন {o} → ক্লোজ {cl}", reply_markup=None if uid in auto_tasks else home_kb())
+                                            f"ওপেন প্রাইস: {o}\nক্লোজ প্রাইস: {cl}", reply_markup=None if uid in auto_tasks else home_kb())
         return True
     finally:
         busy.pop(uid, None)
@@ -316,7 +348,7 @@ async def on_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     u = update.effective_user
     get_user(u.id, u.full_name)
     await update.message.reply_text(
-        "👋 স্বাগতম!\nM1 টেকনিক্যাল সিগন্যাল বটে।\n\n⚠️ এটি ইন্ডিকেটর ভিত্তিক বিশ্লেষণ, দয়া করে ডেমো অ্যাকাউন্টে টেস্ট করুন।", reply_markup=home_kb())
+        "👋 স্বাগতম!\nসম্পূর্ণ পেয়ার ও OTC সমর্থित M1 সিগন্যাল বটে।\n\n⚠️ ট্রেড করার আগে অবশ্যই ডেমো অ্যাকাউন্টে টেস্ট করে নিন।", reply_markup=home_kb())
 
 
 async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -326,10 +358,31 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await q.answer()
     chat_id = q.message.chat_id
 
-    if q.data == "pairs":
-        rows = [[B(p.replace("_otc", ""), callback_data=f"p_{p}") for p in PAIRS[i:i + 2]]
-                for i in range(0, len(PAIRS), 2)]
-        await ctx.bot.send_message(chat_id, "💎 মার্কেট নির্বাচন করুন:", reply_markup=M(rows))
+    if q.data.startswith("pairs_page_"):
+        page = int(q.data.split("_")[-1])
+        per_page = 10
+        start_idx = page * per_page
+        end_idx = start_idx + per_page
+        current_pairs = PAIRS[start_idx:end_idx]
+
+        rows = [[B(p.replace("_otc", " OTC").replace("_", "/"), callback_data=f"p_{p}") for p in current_pairs[i:i + 2]]
+                for i in range(0, len(current_pairs), 2)]
+        
+        nav_buttons = []
+        if page > 0:
+            nav_buttons.append(B("⬅️ আগের পেজ", callback_data=f"pairs_page_{page-1}"))
+        if end_idx < len(PAIRS):
+            nav_buttons.append(B("➡️ পরবর্তী পেজ", callback_data=f"pairs_page_{page+1}"))
+        if nav_buttons:
+            rows.append(nav_buttons)
+        rows.append([B("🏠 হোম মেনু", callback_data="home")])
+
+        await ctx.bot.edit_message_text(chat_id=chat_id, message_id=q.message.message_id,
+                                        text=f"💎 মার্কেট পেয়ার নির্বাচন করুন (পেজ {page+1}):", reply_markup=M(rows))
+
+    elif q.data == "home":
+        await ctx.bot.edit_message_text(chat_id=chat_id, message_id=q.message.message_id,
+                                        text="🏠 প্রধান মেনু:", reply_markup=home_kb())
 
     elif q.data == "auto":
         if busy.get(u.id) or u.id in auto_tasks:
@@ -352,13 +405,13 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             await q.answer("⏹ আগে অটো মোড বন্ধ করুন", show_alert=True)
             return
         if busy.get(u.id):
-            await q.answer("⏳ আগের সিগন্যালের জন্য অপেক্ষা করুন", show_alert=True)
+            await q.answer("⏳ আগের সিগন্যালের ফলাফল আসা পর্যন্ত অপেক্ষা করুন", show_alert=True)
             return
         if user["daily"] >= limit_for(user):
             await ctx.bot.send_message(chat_id, "❌ আজকের লিমিট শেষ।")
             return
         busy[u.id] = True
-        await ctx.bot.send_message(chat_id, "🔍 বিশ্লেষণ করা হচ্ছে...")
+        await ctx.bot.send_message(chat_id, "🔍 হাই-একিউরেসি সিগন্যাল খোঁজা হচ্ছে...")
         asyncio.create_task(run_signal(ctx, chat_id, u.id, q.data[2:]))
 
     elif q.data == "profile":
@@ -368,7 +421,7 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         lim = "∞" if u.id in ADMIN_IDS else limit_for(user)
         await ctx.bot.send_message(
             chat_id, f"👤 নাম: {user['name']}\n🆔 আইডি: {u.id}\n💎 প্ল্যান: {plan}\n"
-                     f"📊 আজ ব্যবহার হয়েছে: {user['daily']}/{lim}\n✅ জয়: {user['wins']} | ❌ পরাজয়: {user['losses']} | উইন রেট: {wr}%",
+                     f"📊 ব্যবহার হয়েছে: {user['daily']}/{lim}\n✅ জয়: {user['wins']} | ❌ পরাজয়: {user['losses']} | উইন রেট: {wr}%",
             reply_markup=home_kb())
 
 
