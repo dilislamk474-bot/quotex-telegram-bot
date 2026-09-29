@@ -1,7 +1,5 @@
 """
-Telegram M1 Signal Bot (Render Port Fixed & All Pairs Version)
-Install:  pip install python-telegram-bot aiohttp numpy matplotlib yfinance
-Run:      python signal_bot.py
+Telegram M1 Signal Bot (Flexible Score Version)
 """
 import asyncio
 import datetime as dt
@@ -45,7 +43,9 @@ BOT_TOKEN = "8419845332:AAGtdmayLgS7uJNiKWnqL4YzsISyMicPsfQ"
 ADMIN_IDS = {6713482506: True}
 DB_PATH = "bot.db"
 FREE_LIMIT, PREMIUM_LIMIT = 5, 25
-MIN_SCORE = 4
+
+# স্কোরের মান কমিয়ে ২ করা হলো যাতে সহজেই সিগন্যাল পাওয়া যায়
+MIN_SCORE = 2
 
 # Bangladesh Timezone (UTC +6)
 BD_TZ = dt.timezone(dt.timedelta(hours=6))
@@ -178,10 +178,10 @@ def analyze(candles: List[dict]) -> Tuple[Optional[str], int, dict]:
     elif hist < 0:
         score -= 1; why.append("MACD -")
 
-    if r < 28:
-        score += 2; why.append(f"RSI {r:.0f} Oversold")
-    elif r > 72:
-        score -= 2; why.append(f"RSI {r:.0f} Overbought")
+    if r < 30:
+        score += 1; why.append(f"RSI {r:.0f} Oversold")
+    elif r > 70:
+        score -= 1; why.append(f"RSI {r:.0f} Overbought")
 
     if price <= mid - 2 * sd:
         score += 1; why.append("Lower BB Bounce")
@@ -346,7 +346,7 @@ async def on_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     u = update.effective_user
     get_user(u.id, u.full_name)
     await update.message.reply_text(
-        "👋 স্বাগতম!\nসম্পূর্ণ পেয়ার ও OTC সমর্থিত M1 সিগন্যাল বটে।\n\n⚠️ ট্রেড করার আগে অবশ্যই ডেমো অ্যাকাউন্টে টেস্ট করে নিন।", reply_markup=home_kb())
+        "👋 স্বাগতম!\nফ্লেক্সিবল স্কোরে আপডেট করা M1 সিগন্যাল বটে।\n\n⚠️ ট্রেড করার আগে অবশ্যই ডেমো অ্যাকাউন্টে টেস্ট করে নিন।", reply_markup=home_kb())
 
 
 async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -409,7 +409,7 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             await ctx.bot.send_message(chat_id, "❌ আজকের লিমিট শেষ।")
             return
         busy[u.id] = True
-        await ctx.bot.send_message(chat_id, "🔍 হাই-একিউরেসি সিগন্যাল খোঁজা হচ্ছে...")
+        await ctx.bot.send_message(chat_id, "🔍 সিগন্যাল খোঁজা হচ্ছে...")
         asyncio.create_task(run_signal(ctx, chat_id, u.id, q.data[2:]))
 
     elif q.data == "profile":
