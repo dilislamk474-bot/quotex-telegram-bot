@@ -1,5 +1,5 @@
 """
-Telegram M1 Signal Bot (Yahoo Finance API version)
+Telegram M1 Signal Bot (Yahoo Finance API & BD Timezone version)
 Install:  pip install python-telegram-bot aiohttp numpy matplotlib yfinance
 Run:      python signal_bot.py
 """
@@ -43,6 +43,9 @@ DB_PATH = "bot.db"
 FREE_LIMIT, PREMIUM_LIMIT = 5, 25
 MIN_SCORE = 3
 
+# Bangladesh Timezone (UTC +6)
+BD_TZ = dt.timezone(dt.timedelta(hours=6))
+
 # Yahoo Finance Symbol Mapping
 PAIR_MAPPING = {
     "EURUSD_otc": "EURUSD=X",
@@ -77,7 +80,7 @@ def setup_db():
 
 
 def get_user(uid: int, name: str = "") -> dict:
-    today = dt.date.today().isoformat()
+    today = dt.datetime.now(BD_TZ).date().isoformat()
     with db() as c:
         c.execute("INSERT OR IGNORE INTO users(user_id,name,day) VALUES(?,?,?)", (uid, name, today))
         c.execute("UPDATE users SET daily=0, day=? WHERE user_id=? AND day!=?", (today, uid, today))
@@ -87,7 +90,8 @@ def get_user(uid: int, name: str = "") -> dict:
 
 
 def is_premium(u: dict) -> bool:
-    return u["id"] in ADMIN_IDS or (u["premium_until"] and u["premium_until"] >= dt.date.today().isoformat())
+    today_str = dt.datetime.now(BD_TZ).date().isoformat()
+    return u["id"] in ADMIN_IDS or (u["premium_until"] and u["premium_until"] >= today_str)
 
 
 def limit_for(u: dict) -> int:
@@ -223,12 +227,12 @@ def build_chart(candles: List[dict], pair: str, direction: str) -> io.BytesIO:
 
 # ==================== SIGNAL FLOW ====================
 def home_kb():
-    return M([[B("📊 New Signal", callback_data="pairs"), B("🤖 Auto Mode", callback_data="auto")],
-              [B("👤 Profile", callback_data="profile")]])
+    return M([[B("📊 নতুন সিগন্যাল", callback_data="pairs"), B("🤖 অটো মোড", callback_data="auto")],
+              [B("👤 প্রোফাইল", callback_data="profile")]])
 
 
 def stop_kb():
-    return M([[B("⏹ Stop Auto", callback_data="stop_auto")]])
+    return M([[B("⏹ অটো বন্ধ করুন", callback_data="stop_auto")]])
 
 
 async def run_signal(ctx: ContextTypes.DEFAULT_TYPE, chat_id: int, uid: int, pair: str,
@@ -238,37 +242,44 @@ async def run_signal(ctx: ContextTypes.DEFAULT_TYPE, chat_id: int, uid: int, pai
         direction, score, info = analyze(candles)
         name = pair.replace("_otc", "")
         if not candles:
-            await ctx.bot.send_message(chat_id, "❌ Market data paoya jayni, abar chesta koro.", reply_markup=home_kb())
+            await ctx.bot.send_message(chat_id, "❌ মার্কেট ডাটা পাওয়া যায়নি, আবার চেষ্টা করুন।", reply_markup=home_kb())
             return False
         if direction is None:
             if not quiet_no_trade:
                 await ctx.bot.send_message(
-                    chat_id, f"⚪ {name}: NO TRADE\nSignal porishkar na (score {score:+d}). Onno pair try koro.",
+                    chat_id, f"⚪ {name}: ট্রেড করার মতো পরিষ্কার পরিস্থিতি নেই (স্কোর {score:+d})। অন্য পেয়ার চেষ্টা করুন।",
                     reply_markup=home_kb())
             return False
 
-        entry = (dt.datetime.now() + dt.timedelta(minutes=1)).replace(second=0, microsecond=0)
+        # বাংলাদেশ সময় অনুযায়ী এন্ট্রি টাইম নির্ধারণ
+        now_bd = dt.datetime.now(BD_TZ)
+        entry = (now_bd + dt.timedelta(minutes=1)).replace(second=0, microsecond=0)
         use_signal(uid)
         icon = "🟢" if direction == "CALL" else "🔴"
         await ctx.bot.send_photo(
             chat_id, build_chart(candles, pair, direction),
             caption=f"{icon} {name} OTC — {direction}\n"
-            f"⏰ Entry: {entry:%H:%M} | Expiry: M1\n"
-            f"📊 Strength: {abs(score)}/5\n"
-            f"📈 RSI {info['rsi']} | {', '.join(info['why'])}\n\n⏳ Result check hobe...")
+            f"⏰ এন্ট্রি সময়: {entry.strftime('%H:%M')} | মেয়াদ: M1\n"
+            f"📊 সিগন্যাল শক্তি: {abs(score)}/5\n"
+            f"📈 RSI {info['rsi']} | {', '.join(info['why'])}\n\n⏳ ফলাফল চেক করা হচ্ছে...")
 
-        await asyncio.sleep(max(0, (entry + dt.timedelta(minutes=1, seconds=8) - dt.datetime.now()).total_seconds()))
+        # নির্দিষ্ট এন্ট্রি সময় পর্যন্ত অপেক্ষা করা
+        wait_seconds = (entry - dt.datetime.now(BD_TZ)).total_seconds()
+        if wait_seconds > 0:
+            await asyncio.sleep(wait_seconds)
+
+        await asyncio.sleep(68)  # ক্যান্ডেল ক্লোজ হওয়ার জন্য অতিরিক্ত সময়
 
         res = await fetch_candles(pair, 10)
         target = next((k for k in res if abs(int(k["epoch"]) - int(entry.timestamp())) <= 30), None)
         if not target:
-            await ctx.bot.send_message(chat_id, "⚠️ Result candle paoya jayni.", reply_markup=home_kb())
+            await ctx.bot.send_message(chat_id, "⚠️ ফলাফল ক্যান্ডেল পাওয়া যায়নি।", reply_markup=home_kb())
             return True
         o, cl = float(target["open"]), float(target["close"])
         win = cl > o if direction == "CALL" else cl < o
         add_result(uid, win)
-        await ctx.bot.send_message(chat_id, f"{'✅ WIN' if win else '❌ LOSS'} — {name} {direction}\n"
-                                            f"Open {o} → Close {cl}", reply_markup=None if uid in auto_tasks else home_kb())
+        await ctx.bot.send_message(chat_id, f"{'✅ WIN (জিতেছে)' if win else '❌ LOSS (হেরেছে)'} — {name} {direction}\n"
+                                            f"ওপেন {o} → ক্লোজ {cl}", reply_markup=None if uid in auto_tasks else home_kb())
         return True
     finally:
         busy.pop(uid, None)
@@ -279,7 +290,7 @@ async def auto_loop(ctx: ContextTypes.DEFAULT_TYPE, chat_id: int, uid: int):
         while True:
             user = get_user(uid)
             if user["daily"] >= limit_for(user):
-                await ctx.bot.send_message(chat_id, "❌ Ajker limit sesh, auto mode bondho.", reply_markup=home_kb())
+                await ctx.bot.send_message(chat_id, "❌ আজকের লিমিট শেষ, অটো মোড বন্ধ করা হলো।", reply_markup=home_kb())
                 return
             results = await asyncio.gather(*[fetch_candles(p) for p in PAIRS])
             best = None
@@ -296,7 +307,6 @@ async def auto_loop(ctx: ContextTypes.DEFAULT_TYPE, chat_id: int, uid: int):
     except asyncio.CancelledError:
         raise
     finally:
-    
         auto_tasks.pop(uid, None)
         busy.pop(uid, None)
 
@@ -306,7 +316,7 @@ async def on_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     u = update.effective_user
     get_user(u.id, u.full_name)
     await update.message.reply_text(
-        "👋 Shagotom!\nM1 Technical Signal Bot.\n\n⚠️ Eta indicator-based analysis, demo-te test koro.", reply_markup=home_kb())
+        "👋 স্বাগতম!\nM1 টেকনিক্যাল সিগন্যাল বটে।\n\n⚠️ এটি ইন্ডিকেটর ভিত্তিক বিশ্লেষণ, দয়া করে ডেমো অ্যাকাউন্টে টেস্ট করুন।", reply_markup=home_kb())
 
 
 async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -319,36 +329,36 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     if q.data == "pairs":
         rows = [[B(p.replace("_otc", ""), callback_data=f"p_{p}") for p in PAIRS[i:i + 2]]
                 for i in range(0, len(PAIRS), 2)]
-        await ctx.bot.send_message(chat_id, "💎 Market choose koro:", reply_markup=M(rows))
+        await ctx.bot.send_message(chat_id, "💎 মার্কেট নির্বাচন করুন:", reply_markup=M(rows))
 
     elif q.data == "auto":
         if busy.get(u.id) or u.id in auto_tasks:
-            await q.answer("⏳ Age choloman signal/auto sesh koro", show_alert=True)
+            await q.answer("⏳ আগের সিগন্যাল বা অটো শেষ হওয়া পর্যন্ত অপেক্ষা করুন", show_alert=True)
             return
         if user["daily"] >= limit_for(user):
-            await ctx.bot.send_message(chat_id, "❌ Ajker limit sesh.")
+            await ctx.bot.send_message(chat_id, "❌ আজকের লিমিট শেষ।")
             return
-        await ctx.bot.send_message(chat_id, "🤖 AUTO MODE cholche...", reply_markup=stop_kb())
+        await ctx.bot.send_message(chat_id, "🤖 অটো মোড চালু করা হয়েছে...", reply_markup=stop_kb())
         auto_tasks[u.id] = asyncio.create_task(auto_loop(ctx, chat_id, u.id))
 
     elif q.data == "stop_auto":
         t = auto_tasks.pop(u.id, None)
         if t:
             t.cancel()
-        await ctx.bot.send_message(chat_id, "⏹ AUTO MODE bondho", reply_markup=home_kb())
+        await ctx.bot.send_message(chat_id, "⏹ অটো মোড বন্ধ করা হয়েছে", reply_markup=home_kb())
 
     elif q.data.startswith("p_"):
         if u.id in auto_tasks:
-            await q.answer("⏹ Age Auto bondho koro", show_alert=True)
+            await q.answer("⏹ আগে অটো মোড বন্ধ করুন", show_alert=True)
             return
         if busy.get(u.id):
-            await q.answer("⏳ Opekha koro", show_alert=True)
+            await q.answer("⏳ আগের সিগন্যালের জন্য অপেক্ষা করুন", show_alert=True)
             return
         if user["daily"] >= limit_for(user):
-            await ctx.bot.send_message(chat_id, "❌ Limit sesh.")
+            await ctx.bot.send_message(chat_id, "❌ আজকের লিমিট শেষ।")
             return
         busy[u.id] = True
-        await ctx.bot.send_message(chat_id, "🔍 Analyze korchi...")
+        await ctx.bot.send_message(chat_id, "🔍 বিশ্লেষণ করা হচ্ছে...")
         asyncio.create_task(run_signal(ctx, chat_id, u.id, q.data[2:]))
 
     elif q.data == "profile":
@@ -357,8 +367,8 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         plan = "ADMIN" if u.id in ADMIN_IDS else "PREMIUM" if is_premium(user) else "FREE"
         lim = "∞" if u.id in ADMIN_IDS else limit_for(user)
         await ctx.bot.send_message(
-            chat_id, f"👤 {user['name']}\n🆔 {u.id}\n💎 Plan: {plan}\n"
-                     f"📊 Aj: {user['daily']}/{lim}\n✅ {user['wins']} | ❌ {user['losses']} | Win rate {wr}%",
+            chat_id, f"👤 নাম: {user['name']}\n🆔 আইডি: {u.id}\n💎 প্ল্যান: {plan}\n"
+                     f"📊 আজ ব্যবহার হয়েছে: {user['daily']}/{lim}\n✅ জয়: {user['wins']} | ❌ পরাজয়: {user['losses']} | উইন রেট: {wr}%",
             reply_markup=home_kb())
 
 
@@ -368,13 +378,13 @@ async def on_addpremium(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     try:
         uid, days = int(ctx.args[0]), int(ctx.args[1])
     except (IndexError, ValueError):
-        await update.message.reply_text("Usage: /addpremium <user_id> <days>")
+        await update.message.reply_text("ব্যবহারবিধি: /addpremium <user_id> <days>")
         return
     get_user(uid)
-    until = (dt.date.today() + dt.timedelta(days=days)).isoformat()
+    until = (dt.datetime.now(BD_TZ).date() + dt.timedelta(days=days)).isoformat()
     with db() as c:
         c.execute("UPDATE users SET premium_until=? WHERE user_id=?", (until, uid))
-    await update.message.reply_text(f"✅ {uid} premium until {until}")
+    await update.message.reply_text(f"✅ {uid} আইডিটি {until} তারিখ পর্যন্ত প্রিমিয়াম করা হয়েছে।")
 
 
 async def on_users(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -382,7 +392,7 @@ async def on_users(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return
     with db() as c:
         n = c.execute("SELECT COUNT(*) FROM users").fetchone()[0]
-    await update.message.reply_text(f"👥 Total users: {n}")
+    await update.message.reply_text(f"👥 মোট ব্যবহারকারী: {n}")
 
 
 def main():
