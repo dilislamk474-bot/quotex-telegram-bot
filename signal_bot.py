@@ -17,6 +17,9 @@ import numpy as np
 from telegram import InlineKeyboardButton as B, InlineKeyboardMarkup as M, Update
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
 
+from flask import Flask
+from threading import Thread
+
 # Logging setup
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -42,6 +45,18 @@ PAIR_MAPPING = {
 PAIRS = list(PAIR_MAPPING.keys())
 busy: Dict[int, bool] = {}
 auto_tasks: Dict[int, asyncio.Task] = {}
+
+
+# ==================== WEB SERVER FOR RENDER ====================
+web_app = Flask('')
+
+@web_app.route('/')
+def home():
+    return "Asif Signals Bot is running live!"
+
+def run_web():
+    port = int(os.environ.get("PORT", 8080))
+    web_app.run(host='0.0.0.0', port=port)
 
 
 # ==================== DATABASE ====================
@@ -307,6 +322,11 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
     logger.error("Exception while handling an update:", exc_info=context.error)
 
 def main():
+    # ব্যাকগ্রাউন্ডে ফ্লাস্ক ওয়েব সার্ভার স্টার্ট করা হলো যাতে রেন্ডার পোর্ট নিয়ে কোনো ঝামেলা না করে
+    web_thread = Thread(target=run_web)
+    web_thread.daemon = True
+    web_thread.start()
+
     setup_db()
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", cmd_start))
