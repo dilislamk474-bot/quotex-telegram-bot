@@ -1,5 +1,5 @@
 """
-Telegram M1 Signal Bot (Brazilian AI Ultra Pro Edition - Instant Start/Stop & 95%+ Accuracy)
+Telegram M1 Signal Bot (Asif Signals Bot - Full Control Ultra Pro Edition)
 """
 import asyncio
 import datetime as dt
@@ -25,7 +25,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-type", "text/html")
         self.end_headers()
-        self.wfile.write(b"<html><body><h1>Brazilian Core AI Ultra Bot is running!</h1></body></html>")
+        self.wfile.write(b"<html><body><h1>Asif Signals Bot is running smoothly!</h1></body></html>")
     def log_message(self, format, *args):
         return
 
@@ -255,7 +255,7 @@ def build_chart(candles: List[dict], pair: str, direction: str) -> io.BytesIO:
                 color=arrow_col, fontsize=13, fontweight="bold",
                 arrowprops=dict(arrowstyle="->", color=arrow_col))
     ax.set_xlim(-1, len(data) + 6)
-    ax.set_title(f"{pair.replace('_otc', '').upper()} · ULTRA AI 95%+", color="white")
+    ax.set_title(f"{pair.replace('_otc', '').upper()} · ASIF AI ULTRA 95%+", color="white")
     ax.tick_params(colors="#8b949e")
     for sp in ax.spines.values():
         sp.set_color("#30363d")
@@ -263,7 +263,7 @@ def build_chart(candles: List[dict], pair: str, direction: str) -> io.BytesIO:
     return buf
 
 
-# ==================== SIGNAL FLOW ====================
+# ==================== KEYBOARDS ====================
 def home_kb():
     return M([[B("📊 সিগন্যাল পেয়ারসমূহ", callback_data="pairs_page_0"), B("🔔 অটো নোটিফিকেশন চালু", callback_data="auto")],
               [B("👤 আমার প্রোফাইল", callback_data="profile"), B("💎 ভিআইপি প্ল্যান", callback_data="vip")],
@@ -274,6 +274,7 @@ def stop_kb():
     return M([[B("⏹ অটো নোটিফিকেশন বন্ধ করুন", callback_data="stop_auto")]])
 
 
+# ==================== SIGNAL FLOW ====================
 async def run_signal(ctx: ContextTypes.DEFAULT_TYPE, chat_id: int, uid: int, pair: str,
                      quiet_no_trade: bool = False) -> bool:
     try:
@@ -289,7 +290,7 @@ async def run_signal(ctx: ContextTypes.DEFAULT_TYPE, chat_id: int, uid: int, pai
         if direction is None:
             if not quiet_no_trade:
                 await ctx.bot.send_message(
-                    chat_id, f"⚪ {clean_name}: একিউরেসি ৯৫%+ না থাকায় পরবর্তী শক্তিশালী সিগন্যালের জন্য অপেক্ষা করা হচ্ছে।",
+                    chat_id, f"⚪ {clean_name}: একিউরেসি ৯৫%+ না থাকায় পরবর্তী সিগন্যালের জন্য অপেক্ষা করা হচ্ছে।",
                     reply_markup=home_kb())
             return False
 
@@ -304,7 +305,7 @@ async def run_signal(ctx: ContextTypes.DEFAULT_TYPE, chat_id: int, uid: int, pai
         why_text = "\n".join([f"• {w}" for w in info['why']])
         
         caption_text = (
-            f"🔥 **BRAZILIAN CORE AI (ULTRA PRO 95%+)** 🔥\n"
+            f"🔥 **ASIF SIGNALS BOT (ULTRA PRO 95%+)** 🔥\n"
             f"━━━━━━━━━━━━━━━━━━━━\n"
             f"📊 PAIR ➜ {clean_name} · HIGH ACCURACY\n"
             f"⏰ ENTRY ➜ {entry.strftime('%H:%M')} (UTC+6)\n"
@@ -318,7 +319,7 @@ async def run_signal(ctx: ContextTypes.DEFAULT_TYPE, chat_id: int, uid: int, pai
             f"🧠 **WHY {direction}**\n"
             f"{why_text}\n"
             f"⏳ Smart Result Tracking Active\n"
-            f"🤖 👑 ELITE PRO"
+            f"👑 MASTER ASIF AJ"
         )
 
         await ctx.bot.send_photo(
@@ -397,14 +398,14 @@ async def on_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     u = update.effective_user
     get_user(u.id, u.full_name)
     await update.message.reply_text(
-        "👋 স্বাগতম!\n🔥 **Brazilian Core AI Ultra (95%+)** বটে স্বাগতম।\n\nনিচের মেনু থেকে আপনার পছন্দমতো অপশন সিলেক্ট করুন বা অটো মোড চালু করুন!",
+        "👋 স্বাগতম!\n🔥 **Asif Signals Bot Ultra (95%+)** বটে স্বাগতম।\n\nনিচের মেনু থেকে আপনার পছন্দমতো অপশন সিলেক্ট করুন বা ইনস্ট্যান্ট অটো মোড চালু করুন!",
         parse_mode="Markdown", reply_markup=home_kb())
 
 async def cmd_signal(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await on_callback_data_pairs(update, ctx)
 
 async def cmd_ai(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🤖 **Brazilian Core AI Engine v6.0**\n\nমার্কেট ট্রেন্ড ও স্ট্রং কনফ্লুয়েন্স এনালাইজ করার জন্য পুরোপুরি প্রস্তুত।", reply_markup=home_kb())
+    await update.message.reply_text("🤖 **Asif AI Engine v6.0**\n\nমার্কেট ট্রেন্ড ও স্ট্রং কনফ্লুয়েন্স এনালাইজ করার জন্য পুরোপুরি প্রস্তুত।", reply_markup=home_kb())
 
 async def cmd_future(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("📊 **Blackout Future List**\n\nআগামী ১ ঘণ্টার জন্য মার্কেটের সবথেকে হাই প্রবাবিলিটি পেয়ারগুলোর লিস্ট স্ক্যান করা হচ্ছে...", reply_markup=home_kb())
@@ -443,7 +444,20 @@ async def cmd_stop(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("ℹ️ আপনার অটো মোড ইতিমধ্যে বন্ধ রয়েছে।", reply_markup=home_kb())
 
 async def cmd_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("ℹ️ **Help & Guide**\n\nবট ব্যবহার করতে `/start` লিখে মেনু ওপেন করুন অথবা সরাসরি অটো মোড চালু করুন।", reply_markup=home_kb())
+    await update.message.reply_text(
+        "ℹ️ **Asif Signals Bot — Help & Commands**\n\n"
+        "• /start - বটের হোম মেনু চালু করুন\n"
+        "• /signal - পেয়ার তালিকা থেকে সিগন্যাল নিন\n"
+        "• /ai - এআই ইঞ্জিন স্ট্যাটাস চেক করুন\n"
+        "• /future - মার্কেট ফিউচার স্ক্যান\n"
+        "• /checker - উইন/লস রেকর্ড চেকার\n"
+        "• /profile - আপনার স্ট্যাটাস ও উইন রেট দেখুন\n"
+        "• /vip - ভিআইপি প্ল্যান তথ্য\n"
+        "• /stop - ইনস্ট্যান্ট অটো মোড বন্ধ করুন\n"
+        "• /addpremium <id> <days> - (Admin Only) প্রিমিয়াম দিন\n"
+        "• /users - (Admin Only) মোট ইউজার দেখুন",
+        reply_markup=home_kb()
+    )
 
 
 # ==================== CALLBACK QUERY ROUTER ====================
@@ -592,7 +606,7 @@ def main():
         for t in list(auto_tasks.values()):
             t.cancel()
     app.post_shutdown = on_shutdown
-    print("✅ Brazilian Core AI Fully Fixed Bot started successfully")
+    print("✅ Asif Signals Bot Fully Controlled & Started Successfully")
     app.run_polling(drop_pending_updates=True)
 
 
