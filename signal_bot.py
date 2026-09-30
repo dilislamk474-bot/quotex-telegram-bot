@@ -25,7 +25,7 @@ logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s
 logger = logging.getLogger(__name__)
 
 # ==================== CONFIG ====================
-BOT_TOKEN = "8419845332:AAGtdmayLgS7uJNiKWnqL4YzsISyMicPsfQ"
+BOT_TOKEN = "8419845332:AAE5GTHvYGt075KF1i9xR_C4Pl18J8qI64k"
 ADMIN_IDS = {6713482506: True}
 DB_PATH = "bot.db"
 FREE_LIMIT, PREMIUM_LIMIT = 5, 25
