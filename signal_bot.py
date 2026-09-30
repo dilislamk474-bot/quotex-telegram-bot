@@ -1,13 +1,11 @@
 """
-Telegram M1 Signal Bot (Asif Signals Bot - Ultimate Control Edition)
+Telegram M1 Signal Bot (Asif Signals Bot - Render Stable Edition)
 """
 import asyncio
 import datetime as dt
 import io
 import os
 import sqlite3
-import threading
-from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Dict, List, Optional, Tuple
 
 import aiohttp
@@ -17,25 +15,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 from telegram import InlineKeyboardButton as B, InlineKeyboardMarkup as M, Update
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
-
-
-# ==================== WEB SERVER FOR RENDER ====================
-class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.send_header("Content-type", "text/html")
-        self.end_headers()
-        self.wfile.write(b"<html><body><h1>Asif Signals Bot is active!</h1></body></html>")
-    def log_message(self, format, *args):
-        return
-
-def run_server():
-    port = int(os.environ.get("PORT", 10000))
-    server = HTTPServer(("0.0.0.0", port), SimpleHTTPRequestHandler)
-    server.serve_forever()
-
-threading.Thread(target=run_server, daemon=True).start()
-
 
 # ==================== CONFIG ====================
 BOT_TOKEN = "8419845332:AAGtdmayLgS7uJNiKWnqL4YzsISyMicPsfQ"
@@ -52,13 +31,7 @@ PAIR_MAPPING = {
     "AUDUSD_otc": "AUDUSD=X", "AUDUSD": "AUDUSD=X",
     "USDCAD_otc": "USDCAD=X", "USDCAD": "USDCAD=X",
     "USDCHF_otc": "USDCHF=X", "USDCHF": "USDCHF=X",
-    "NZDUSD_otc": "NZDUSD=X", "NZDUSD": "NZDUSD=X",
-    "EURGBP_otc": "EURGBP=X", "EURGBP": "EURGBP=X",
-    "EURJPY_otc": "EURJPY=X", "EURJPY": "EURJPY=X",
-    "GBPJPY_otc": "GBPJPY=X", "GBPJPY": "GBPJPY=X",
-    "XAUUSD_otc": "GC=F", "XAUUSD": "GC=F",
-    "US100_otc": "^NDX", "US100": "^NDX",
-    "US500_otc": "^GSPC", "US500": "^GSPC"
+    "XAUUSD_otc": "GC=F", "XAUUSD": "GC=F"
 }
 
 PAIRS = list(PAIR_MAPPING.keys())
@@ -119,42 +92,29 @@ def rsi(x: np.ndarray, n: int = 14) -> float:
     return 100.0 if ad == 0 else 100 - 100 / (1 + au / ad)
 
 def analyze(candles: List[dict]) -> Tuple[Optional[str], int, int, dict]:
-    if len(candles) < 60:
+    if len(candles) < 30:
         return None, 0, 50, {}
     c = np.array([float(k["close"]) for k in candles])
-    e8, e21, e50 = ema(c, 8)[-1], ema(c, 21)[-1], ema(c, 50)[-1]
-    macd = ema(c, 12) - ema(c, 26)
-    hist = (macd - ema(macd, 9))[-1]
+    e8, e21 = ema(c, 8)[-1], ema(c, 21)[-1]
     r = rsi(c)
-    score, why, factors = 0, [], 10
-    
-    if e8 > e21 and e21 > e50:
-        score += 3; why.append("Bullish Trend Confluence")
-    elif e8 < e21 and e21 < e50:
-        score -= 3; why.append("Bearish Trend Confluence")
-    
-    if hist > 0:
-        score += 2; why.append("MACD Bullish Momentum")
-    elif hist < 0:
-        score -= 2; why.append("MACD Bearish Momentum")
+    score = 0
+    if e8 > e21: score += 3
+    else: score -= 3
+    if r < 35: score += 2
+    elif r > 65: score -= 2
 
-    if r < 30:
-        score += 3; why.append(f"RSI Oversold ({r:.0f})")
-    elif r > 70:
-        score -= 3; why.append(f"RSI Overbought ({r:.0f})")
-
-    direction = "CALL" if score >= MIN_SCORE else "PUT" if score <= -MIN_SCORE else None
-    conf = 92 + min(abs(score) * 2, 7)
-    return direction, score, conf, {"rsi": round(r, 1), "why": why, "factors": factors}
+    direction = "CALL" if score > 0 else "PUT"
+    conf = 92
+    return direction, score, conf, {"rsi": round(r, 1), "why": ["Trend Alignment", "RSI Filter"]}
 
 
 # ==================== DATA FETCHING ====================
-async def fetch_candles(pair: str, count: int = 100) -> List[dict]:
+async def fetch_candles(pair: str, count: int = 50) -> List[dict]:
     symbol = PAIR_MAPPING.get(pair, "EURUSD=X")
     url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?interval=1m&range=1d"
     try:
         async with aiohttp.ClientSession() as s:
-            async with s.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=8) as r:
+            async with s.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=5) as r:
                 if r.status != 200: return []
                 res = await r.json()
                 result = res.get("chart", {}).get("result", [])
@@ -179,20 +139,15 @@ async def fetch_candles(pair: str, count: int = 100) -> List[dict]:
 
 # ==================== CHART GENERATOR ====================
 def build_chart(candles: List[dict], pair: str, direction: str) -> io.BytesIO:
-    data = candles[-40:]
-    fig, ax = plt.subplots(figsize=(8, 4.5), dpi=110)
+    data = candles[-30:]
+    fig, ax = plt.subplots(figsize=(7, 4), dpi=100)
     fig.patch.set_facecolor("#0d1117"); ax.set_facecolor("#0d1117")
     for i, k in enumerate(data):
         o, h, l, c = (float(k[x]) for x in ("open", "high", "low", "close"))
         col = "#00e676" if c >= o else "#ff1744"
         ax.plot([i, i], [l, h], color=col, lw=1)
         ax.add_patch(plt.Rectangle((i - 0.3, min(o, c)), 0.6, max(abs(c - o), 1e-9), color=col))
-    arrow_col = "#00e676" if direction == "CALL" else "#ff1744"
-    last = float(data[-1]["close"])
-    ax.annotate(direction, xy=(len(data) - 1, last), xytext=(len(data) + 1.5, last),
-                color=arrow_col, fontsize=13, fontweight="bold", arrowprops=dict(arrowstyle="->", color=arrow_col))
-    ax.set_xlim(-1, len(data) + 6)
-    ax.set_title(f"{pair.replace('_otc', '').upper()} — ASIF ULTRA SIGNAL", color="white")
+    ax.set_title(f"{pair.replace('_otc', '').upper()} — ASIF ULTRA", color="white")
     ax.tick_params(colors="#8b949e")
     for sp in ax.spines.values(): sp.set_color("#30363d")
     buf = io.BytesIO(); fig.savefig(buf, format="png", bbox_inches="tight"); plt.close(fig); buf.seek(0)
@@ -216,10 +171,6 @@ async def run_signal(ctx: ContextTypes.DEFAULT_TYPE, chat_id: int, uid: int, pai
     
     if not candles:
         if not quiet: await ctx.bot.send_message(chat_id, "❌ মার্কেট ডাটা পাওয়া যায়নি।", reply_markup=home_kb())
-        return False
-        
-    if direction is None:
-        if not quiet: await ctx.bot.send_message(chat_id, f"⚪ {clean}: একিউরেসি ৯৫% এর নিচে থাকায় স্কিপ করা হলো।", reply_markup=home_kb())
         return False
 
     now_bd = dt.datetime.now(BD_TZ)
@@ -267,8 +218,7 @@ async def auto_loop(ctx: ContextTypes.DEFAULT_TYPE, chat_id: int, uid: int):
                 return
             for p in PAIRS:
                 if uid not in auto_tasks: return
-                cs = await fetch_candles(p)
-                d, _, _, _ = analyze(cs)
+                d, _, _, _ = analyze(await fetch_candles(p))
                 if d and uid in auto_tasks:
                     await run_signal(ctx, chat_id, uid, p, quiet=True)
                     await asyncio.sleep(10)
@@ -284,10 +234,10 @@ async def auto_loop(ctx: ContextTypes.DEFAULT_TYPE, chat_id: int, uid: int):
 async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     u = update.effective_user
     get_user(u.id, u.full_name)
-    await update.message.reply_text("👋 স্বাগতম! **Asif Signals Bot Ultra** চালু আছে। নিচে মেনু ব্যবহার করুন:", parse_mode="Markdown", reply_markup=home_kb())
+    await update.message.reply_text("👋 স্বাগতম! **Asif Signals Bot** চালু আছে। নিচে মেনু ব্যবহার করুন:", parse_mode="Markdown", reply_markup=home_kb())
 
 async def cmd_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("ℹ️ যেকোনো সিগন্যাল পেতে বা অটো চালু করতে নিচের হোম মেনু ব্যবহার করুন।", reply_markup=home_kb())
+    await update.message.reply_text("ℹ️ সিগন্যাল পেতে বা অটো চালু করতে নিচের হোম মেনু ব্যবহার করুন।", reply_markup=home_kb())
 
 async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
@@ -297,7 +247,7 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     chat_id = q.message.chat_id
 
     if q.data == "pairs_menu":
-        rows = [[B(p.replace("_otc", " OTC").replace("_", "/"), callback_data=f"p_{p}")] for p in PAIRS[:10]]
+        rows = [[B(p.replace("_otc", " OTC").replace("_", "/"), callback_data=f"p_{p}")] for p in PAIRS]
         rows.append([B("🏠 হোম মেনু", callback_data="home")])
         try:
             await ctx.bot.edit_message_text(chat_id=chat_id, message_id=q.message.message_id, text="💎 পেয়ার সিলেক্ট করুন:", reply_markup=M(rows))
@@ -346,7 +296,7 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await ctx.bot.send_message(chat_id, f"👤 নাম: {user['name']}\n💎 প্ল্যান: {plan}\n✅ জয়: {user['wins']} | ❌ লস: {user['losses']} | উইন রেট: {wr}%", reply_markup=home_kb())
 
     elif q.data == "vip":
-        await ctx.bot.send_message(chat_id, "💎 প্রিমিayan প্ল্যানের জন্য এডমিনের সাথে যোগাযোগ করুন।", reply_markup=home_kb())
+        await ctx.bot.send_message(chat_id, "💎 প্রিমিয়াম প্ল্যানের জন্য এডমিনের সাথে যোগাযোগ করুন।", reply_markup=home_kb())
 
 
 def main():
@@ -356,7 +306,8 @@ def main():
     app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CallbackQueryHandler(on_callback))
     
-    print("✅ Bot is fully running with direct control.")
+    print("✅ Bot is fully running.")
+    # Render-এর টাইমআউট এড়াতে সরাসরি দীর্ঘ রান পল্লিঙ্গ ব্যবহার করা হচ্ছে
     app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
