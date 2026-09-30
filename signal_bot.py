@@ -1,5 +1,5 @@
 """
-Telegram M1 Signal Bot (Asif Signals Bot - Full Control Ultra Pro Edition)
+Telegram M1 Signal Bot (Asif Signals Bot - Ultimate Control Edition)
 """
 import asyncio
 import datetime as dt
@@ -19,23 +19,22 @@ from telegram import InlineKeyboardButton as B, InlineKeyboardMarkup as M, Updat
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
 
 
-# ==================== ROBUST WEB SERVER FOR RENDER PORT ====================
+# ==================== WEB SERVER FOR RENDER ====================
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.send_header("Content-type", "text/html")
         self.end_headers()
-        self.wfile.write(b"<html><body><h1>Asif Signals Bot is running smoothly!</h1></body></html>")
+        self.wfile.write(b"<html><body><h1>Asif Signals Bot is active!</h1></body></html>")
     def log_message(self, format, *args):
         return
 
-def run_dummy_server():
+def run_server():
     port = int(os.environ.get("PORT", 10000))
     server = HTTPServer(("0.0.0.0", port), SimpleHTTPRequestHandler)
-    print(f"Dummy web server running on port {port}")
     server.serve_forever()
 
-threading.Thread(target=run_dummy_server, daemon=True).start()
+threading.Thread(target=run_server, daemon=True).start()
 
 
 # ==================== CONFIG ====================
@@ -43,7 +42,6 @@ BOT_TOKEN = "8419845332:AAGtdmayLgS7uJNiKWnqL4YzsISyMicPsfQ"
 ADMIN_IDS = {6713482506: True}
 DB_PATH = "bot.db"
 FREE_LIMIT, PREMIUM_LIMIT = 5, 25
-
 MIN_SCORE = 6  
 BD_TZ = dt.timezone(dt.timedelta(hours=6))
 
@@ -58,36 +56,12 @@ PAIR_MAPPING = {
     "EURGBP_otc": "EURGBP=X", "EURGBP": "EURGBP=X",
     "EURJPY_otc": "EURJPY=X", "EURJPY": "EURJPY=X",
     "GBPJPY_otc": "GBPJPY=X", "GBPJPY": "GBPJPY=X",
-    "EURAUD_otc": "EURAUD=X", "EURAUD": "EURAUD=X",
-    "EURCAD_otc": "EURCAD=X", "EURCAD": "EURCAD=X",
-    "EURCHF_otc": "EURCHF=X", "EURCHF": "EURCHF=X",
-    "EURNZD_otc": "EURNZD=X", "EURNZD": "EURNZD=X",
-    "GBPAUD_otc": "GBPAUD=X", "GBPAUD": "GBPAUD=X",
-    "GBPCAD_otc": "GBPCAD=X", "GBPCAD": "GBPCAD=X",
-    "GBPCHF_otc": "GBPCHF=X", "GBPCHF": "GBPCHF=X",
-    "GBPNZD_otc": "GBPNZD=X", "GBPNZD": "GBPNZD=X",
-    "AUDCAD_otc": "AUDCAD=X", "AUDCAD": "AUDCAD=X",
-    "AUDCHF_otc": "AUDCHF=X", "AUDCHF": "AUDCHF=X",
-    "AUDJPY_otc": "AUDJPY=X", "AUDJPY": "AUDJPY=X",
-    "AUDNZD_otc": "AUDNZD=X", "AUDNZD": "AUDNZD=X",
-    "CADCHF_otc": "CADCHF=X", "CADCHF": "CADCHF=X",
-    "CADJPY_otc": "CADJPY=X", "CADJPY": "CADJPY=X",
-    "CHFJPY_otc": "CHFJPY=X", "CHFJPY": "CHFJPY=X",
-    "NZDCAD_otc": "NZDCAD=X", "NZDCAD": "NZDCAD=X",
-    "NZDCHF_otc": "NZDCHF=X", "NZDCHF": "NZDCHF=X",
-    "NZDJPY_otc": "NZDJPY=X", "NZDJPY": "NZDJPY=X",
     "XAUUSD_otc": "GC=F", "XAUUSD": "GC=F",
-    "XAG_USD_otc": "SI=F", "XAG_USD": "SI=F",
-    "USCRUDE_otc": "CL=F", "USCRUDE": "CL=F",
-    "UKBRENT_otc": "BZ=F", "UKBRENT": "BZ=F",
     "US100_otc": "^NDX", "US100": "^NDX",
-    "US500_otc": "^GSPC", "US500": "^GSPC",
-    "AAPL": "AAPL", "BA": "BA", "MSFT": "MSFT",
-    "PFE": "PFE", "META": "META", "JNJ": "JNJ"
+    "US500_otc": "^GSPC", "US500": "^GSPC"
 }
 
 PAIRS = list(PAIR_MAPPING.keys())
-
 busy: Dict[int, bool] = {}
 auto_tasks: Dict[int, asyncio.Task] = {}
 
@@ -96,7 +70,6 @@ auto_tasks: Dict[int, asyncio.Task] = {}
 def db():
     return sqlite3.connect(DB_PATH)
 
-
 def setup_db():
     with db() as c:
         c.execute("""CREATE TABLE IF NOT EXISTS users(
@@ -104,45 +77,38 @@ def setup_db():
             premium_until TEXT DEFAULT '', daily INTEGER DEFAULT 0, day TEXT DEFAULT '',
             wins INTEGER DEFAULT 0, losses INTEGER DEFAULT 0)""")
 
-
 def get_user(uid: int, name: str = "") -> dict:
     today = dt.datetime.now(BD_TZ).date().isoformat()
     with db() as c:
         c.execute("INSERT OR IGNORE INTO users(user_id,name,day) VALUES(?,?,?)", (uid, name, today))
         c.execute("UPDATE users SET daily=0, day=? WHERE user_id=? AND day!=?", (today, uid, today))
-        r = c.execute("SELECT user_id,name,premium_until,daily,wins,losses FROM users WHERE user_id=?",
-                      (uid,)).fetchone()
+        r = c.execute("SELECT user_id,name,premium_until,daily,wins,losses FROM users WHERE user_id=?", (uid,)).fetchone()
     return dict(zip(["id", "name", "premium_until", "daily", "wins", "losses"], r))
-
 
 def is_premium(u: dict) -> bool:
     today_str = dt.datetime.now(BD_TZ).date().isoformat()
     return u["id"] in ADMIN_IDS or (u["premium_until"] and u["premium_until"] >= today_str)
 
-
 def limit_for(u: dict) -> int:
     return 10**6 if u["id"] in ADMIN_IDS else PREMIUM_LIMIT if is_premium(u) else FREE_LIMIT
-
 
 def add_result(uid: int, win: bool):
     col = "wins" if win else "losses"
     with db() as c:
         c.execute(f"UPDATE users SET {col}={col}+1 WHERE user_id=?", (uid,))
 
-
 def use_signal(uid: int):
     with db() as c:
         c.execute("UPDATE users SET daily=daily+1 WHERE user_id=?", (uid,))
 
 
-# ==================== STRICT ULTRA AI ANALYSIS ====================
+# ==================== ANALYSIS ====================
 def ema(x: np.ndarray, n: int) -> np.ndarray:
     a, out = 2 / (n + 1), np.empty_like(x)
     out[0] = x[0]
     for i in range(1, len(x)):
         out[i] = a * x[i] + (1 - a) * out[i - 1]
     return out
-
 
 def rsi(x: np.ndarray, n: int = 14) -> float:
     d = np.diff(x)
@@ -152,7 +118,6 @@ def rsi(x: np.ndarray, n: int = 14) -> float:
         au, ad = (au * (n - 1) + up[i]) / n, (ad * (n - 1) + dn[i]) / n
     return 100.0 if ad == 0 else 100 - 100 / (1 + au / ad)
 
-
 def analyze(candles: List[dict]) -> Tuple[Optional[str], int, int, dict]:
     if len(candles) < 60:
         return None, 0, 50, {}
@@ -161,82 +126,58 @@ def analyze(candles: List[dict]) -> Tuple[Optional[str], int, int, dict]:
     macd = ema(c, 12) - ema(c, 26)
     hist = (macd - ema(macd, 9))[-1]
     r = rsi(c)
-    mid, sd = c[-20:].mean(), c[-20:].std()
-    price = c[-1]
-
     score, why, factors = 0, [], 10
     
     if e8 > e21 and e21 > e50:
-        score += 3; why.append("Strict Bullish EMA Trend Alignment")
+        score += 3; why.append("Bullish Trend Confluence")
     elif e8 < e21 and e21 < e50:
-        score -= 3; why.append("Strict Bearish EMA Trend Alignment")
+        score -= 3; why.append("Bearish Trend Confluence")
     
     if hist > 0:
-        score += 2; why.append("MACD Strong Momentum Bullish")
-        factors += 3
+        score += 2; why.append("MACD Bullish Momentum")
     elif hist < 0:
-        score -= 2; why.append("MACD Strong Momentum Bearish")
-        factors += 3
+        score -= 2; why.append("MACD Bearish Momentum")
 
-    if r < 25:
-        score += 3; why.append(f"RSI {r:.0f} Deep Oversold Zone")
-        factors += 2
-    elif r > 75:
-        score -= 3; why.append(f"RSI {r:.0f} Deep Overbought Zone")
-        factors += 2
-    elif 45 <= r <= 55:
-        factors += 1
-
-    if price <= mid - 2.0 * sd:
-        score += 2; why.append("Bollinger Lower Band Rejection Touch")
-    elif price >= mid + 2.0 * sd:
-        score -= 2; why.append("Bollinger Upper Band Rejection Touch")
+    if r < 30:
+        score += 3; why.append(f"RSI Oversold ({r:.0f})")
+    elif r > 70:
+        score -= 3; why.append(f"RSI Overbought ({r:.0f})")
 
     direction = "CALL" if score >= MIN_SCORE else "PUT" if score <= -MIN_SCORE else None
-    base_conf = 91 + min(abs(score) * 2, 8)
+    conf = 92 + min(abs(score) * 2, 7)
+    return direction, score, conf, {"rsi": round(r, 1), "why": why, "factors": factors}
 
-    return direction, score, base_conf, {"rsi": round(r, 1), "why": why, "factors": factors}
 
-
-# ==================== DATA (YAHOO FINANCE API) ====================
+# ==================== DATA FETCHING ====================
 async def fetch_candles(pair: str, count: int = 100) -> List[dict]:
     symbol = PAIR_MAPPING.get(pair, "EURUSD=X")
     url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?interval=1m&range=1d"
-    headers = {"User-Agent": "Mozilla/5.0"}
     try:
         async with aiohttp.ClientSession() as s:
-            async with s.get(url, headers=headers, timeout=aiohttp.ClientTimeout(total=8)) as r:
-                if r.status != 200:
-                    return []
+            async with s.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=8) as r:
+                if r.status != 200: return []
                 res = await r.json()
                 result = res.get("chart", {}).get("result", [])
-                if not result:
-                    return []
+                if not result: return []
                 meta = result[0]
-                timestamps = meta.get("timestamp", [])
-                quote = meta.get("indicators", {}).get("quote", [{}])[0]
-                opens = quote.get("open", [])
-                highs = quote.get("high", [])
-                lows = quote.get("low", [])
-                closes = quote.get("close", [])
-
+                ts = meta.get("timestamp", [])
+                q = meta.get("indicators", {}).get("quote", [{}])[0]
+                opens, highs, lows, closes = q.get("open", []), q.get("high", []), q.get("low", []), q.get("close", [])
                 candles = []
-                for i in range(len(timestamps)):
+                for i in range(len(ts)):
                     if i < len(opens) and opens[i] is not None and closes[i] is not None:
                         candles.append({
-                            "epoch": int(timestamps[i]),
-                            "open": float(opens[i]),
+                            "epoch": int(ts[i]), "open": float(opens[i]),
                             "high": float(highs[i] if highs[i] is not None else opens[i]),
                             "low": float(lows[i] if lows[i] is not None else opens[i]),
                             "close": float(closes[i])
                         })
                 return candles[-count:]
-    except Exception as e:
-        print("fetch error:", e)
+    except Exception:
         return []
 
 
-# ==================== CHART ====================
+# ==================== CHART GENERATOR ====================
 def build_chart(candles: List[dict], pair: str, direction: str) -> io.BytesIO:
     data = candles[-40:]
     fig, ax = plt.subplots(figsize=(8, 4.5), dpi=110)
@@ -246,221 +187,108 @@ def build_chart(candles: List[dict], pair: str, direction: str) -> io.BytesIO:
         col = "#00e676" if c >= o else "#ff1744"
         ax.plot([i, i], [l, h], color=col, lw=1)
         ax.add_patch(plt.Rectangle((i - 0.3, min(o, c)), 0.6, max(abs(c - o), 1e-9), color=col))
-    closes = np.array([float(k["close"]) for k in candles])
-    ax.plot(range(len(data)), ema(closes, 8)[-40:], color="#ffd600", lw=1, label="EMA8")
-    ax.plot(range(len(data)), ema(closes, 21)[-40:], color="#40c4ff", lw=1, label="EMA21")
-    last = float(data[-1]["close"])
     arrow_col = "#00e676" if direction == "CALL" else "#ff1744"
+    last = float(data[-1]["close"])
     ax.annotate(direction, xy=(len(data) - 1, last), xytext=(len(data) + 1.5, last),
-                color=arrow_col, fontsize=13, fontweight="bold",
-                arrowprops=dict(arrowstyle="->", color=arrow_col))
+                color=arrow_col, fontsize=13, fontweight="bold", arrowprops=dict(arrowstyle="->", color=arrow_col))
     ax.set_xlim(-1, len(data) + 6)
-    ax.set_title(f"{pair.replace('_otc', '').upper()} · ASIF AI ULTRA 95%+", color="white")
+    ax.set_title(f"{pair.replace('_otc', '').upper()} — ASIF ULTRA SIGNAL", color="white")
     ax.tick_params(colors="#8b949e")
-    for sp in ax.spines.values():
-        sp.set_color("#30363d")
+    for sp in ax.spines.values(): sp.set_color("#30363d")
     buf = io.BytesIO(); fig.savefig(buf, format="png", bbox_inches="tight"); plt.close(fig); buf.seek(0)
     return buf
 
 
 # ==================== KEYBOARDS ====================
 def home_kb():
-    return M([[B("📊 সিগন্যাল পেয়ারসমূহ", callback_data="pairs_page_0"), B("🔔 অটো নোটিফিকেশন চালু", callback_data="auto")],
-              [B("👤 আমার প্রোফাইল", callback_data="profile"), B("💎 ভিআইপি প্ল্যান", callback_data="vip")],
-              [B("⏹ অটো বন্ধ করুন", callback_data="stop_auto")]])
+    return M([
+        [B("📊 সিগন্যাল পেয়ারসমূহ", callback_data="pairs_menu"), B("🔔 অটো নোটিফিকেশন", callback_data="auto")],
+        [B("👤 আমার প্রোফাইল", callback_data="profile"), B("💎 ভিআইপি প্ল্যান", callback_data="vip")],
+        [B("⏹ অটো বন্ধ করুন", callback_data="stop_auto")]
+    ])
 
 
-def stop_kb():
-    return M([[B("⏹ অটো নোটিফিকেশন বন্ধ করুন", callback_data="stop_auto")]])
-
-
-# ==================== SIGNAL FLOW ====================
-async def run_signal(ctx: ContextTypes.DEFAULT_TYPE, chat_id: int, uid: int, pair: str,
-                     quiet_no_trade: bool = False) -> bool:
-    try:
-        candles = await fetch_candles(pair)
-        direction, score, conf, info = analyze(candles)
-        clean_name = pair.replace("_otc", "").upper()
+# ==================== SIGNAL HANDLER ====================
+async def run_signal(ctx: ContextTypes.DEFAULT_TYPE, chat_id: int, uid: int, pair: str, quiet: bool = False):
+    candles = await fetch_candles(pair)
+    direction, score, conf, info = analyze(candles)
+    clean = pair.replace("_otc", "").upper()
+    
+    if not candles:
+        if not quiet: await ctx.bot.send_message(chat_id, "❌ মার্কেট ডাটা পাওয়া যায়নি।", reply_markup=home_kb())
+        return False
         
-        if not candles:
-            if not quiet_no_trade:
-                await ctx.bot.send_message(chat_id, "❌ মার্কেট ডাটা পাওয়া যায়নি।", reply_markup=home_kb())
-            return False
-            
-        if direction is None:
-            if not quiet_no_trade:
-                await ctx.bot.send_message(
-                    chat_id, f"⚪ {clean_name}: একিউরেসি ৯৫%+ না থাকায় পরবর্তী সিগন্যালের জন্য অপেক্ষা করা হচ্ছে।",
-                    reply_markup=home_kb())
-            return False
+    if direction is None:
+        if not quiet: await ctx.bot.send_message(chat_id, f"⚪ {clean}: একিউরেসি ৯৫% এর নিচে থাকায় স্কিপ করা হলো।", reply_markup=home_kb())
+        return False
 
-        now_bd = dt.datetime.now(BD_TZ)
-        entry = (now_bd + dt.timedelta(minutes=1)).replace(second=0, microsecond=0)
-        
-        entry_price = float(candles[-1]["close"])
-        use_signal(uid)
-        
-        icon = "🟢" if direction == "CALL" else "🔴"
-        conf_blocks = "▰" * int(conf // 10) + "▱" * (10 - int(conf // 10))
-        why_text = "\n".join([f"• {w}" for w in info['why']])
-        
-        caption_text = (
-            f"🔥 **ASIF SIGNALS BOT (ULTRA PRO 95%+)** 🔥\n"
-            f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"📊 PAIR ➜ {clean_name} · HIGH ACCURACY\n"
-            f"⏰ ENTRY ➜ {entry.strftime('%H:%M')} (UTC+6)\n"
-            f"⏳ EXPIRY ➜ 1 MIN · M1 · MTG 1\n"
-            f"💎 PAYOUT ➜ 85%\n"
-            f"{icon} DIRECTION ➜ {direction}\n"
-            f"🎯 ACCURACY RATE ➜ {conf}% {conf_blocks}\n"
-            f"🏆 GRADE 👑 ULTRA PREMIUM\n"
-            f"🧠 CONFLUENCE ➜ {info['factors']}/17 factors\n"
-            f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"🧠 **WHY {direction}**\n"
-            f"{why_text}\n"
-            f"⏳ Smart Result Tracking Active\n"
-            f"👑 MASTER ASIF AJ"
-        )
+    now_bd = dt.datetime.now(BD_TZ)
+    entry = (now_bd + dt.timedelta(minutes=1)).replace(second=0, microsecond=0)
+    entry_price = float(candles[-1]["close"])
+    use_signal(uid)
+    
+    icon = "🟢" if direction == "CALL" else "🔴"
+    text = (
+        f"🔥 **ASIF SIGNALS BOT (ULTRA PRO)** 🔥\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"📊 PAIR ➜ {clean}\n"
+        f"⏰ ENTRY ➜ {entry.strftime('%H:%M')} (UTC+6)\n"
+        f"⏳ EXPIRY ➜ 1 MIN\n"
+        f"{icon} DIRECTION ➜ {direction}\n"
+        f"🎯 ACCURACY ➜ {conf}%\n"
+        f"👑 MASTER ASIF AJ"
+    )
 
-        await ctx.bot.send_photo(
-            chat_id, build_chart(candles, pair, direction),
-            caption=caption_text, parse_mode="Markdown"
-        )
+    await ctx.bot.send_photo(chat_id, build_chart(candles, pair, direction), caption=text, parse_mode="Markdown")
 
-        wait_seconds = (entry - dt.datetime.now(BD_TZ)).total_seconds() + 62
-        if wait_seconds > 0:
-            await asyncio.sleep(wait_seconds)
+    wait_sec = (entry - dt.datetime.now(BD_TZ)).total_seconds() + 62
+    if wait_sec > 0: await asyncio.sleep(wait_sec)
 
-        res = await fetch_candles(pair, 5)
-        if not res:
-            return True
-
-        target = res[-1]
-        cl = float(target["close"])
-        
-        diff = cl - entry_price
-        tolerance = 0.00005  
-        
-        if abs(diff) < tolerance:
-            win = True  
-        else:
-            win = cl > entry_price if direction == "CALL" else cl < entry_price
-            
-        add_result(uid, win)
-        
-        res_header = "🟩🟩🟩 WIN (PROFIT SECURED) 🟩🟩🟩" if win else "🟥🟥🟥 LOSS 🟥🟥🟥"
-        result_caption = (
-            f"{res_header}\n"
-            f"━━━━━━━━━━━━━━━━━━━━\n"
-            f"📊 PAIR ➜ {clean_name} · {direction}\n"
-            f"⏰ Entry {entry.strftime('%H:%M')} — Closed\n"
-            f"🔓 Open: {entry_price:.5f} | 🔒 Close: {cl:.5f}\n"
-            f"━━━━━━━━━━━━━━━━━━━━"
-        )
-        
-        await ctx.bot.send_message(chat_id, result_caption, reply_markup=None if uid in auto_tasks else home_kb())
-        return True
-    finally:
-        pass
+    res = await fetch_candles(pair, 5)
+    if not res: return True
+    cl = float(res[-1]["close"])
+    win = cl > entry_price if direction == "CALL" else cl < entry_price
+    add_result(uid, win)
+    
+    res_text = "🟩 WIN (PROFIT SECURED) 🟩" if win else "🟥 LOSS 🟥"
+    await ctx.bot.send_message(chat_id, f"{res_text}\n📊 {clean} · {direction}\nOpen: {entry_price:.5f} | Close: {cl:.5f}", 
+                               reply_markup=None if uid in auto_tasks else home_kb())
+    return True
 
 
 async def auto_loop(ctx: ContextTypes.DEFAULT_TYPE, chat_id: int, uid: int):
     try:
-        await ctx.bot.send_message(chat_id, "🔔 হাই-একিউরেসি (95%+) অটো মোড ইনস্ট্যান্ট চালু হয়েছে!", reply_markup=stop_kb())
+        await ctx.bot.send_message(chat_id, "🔔 অটো নোটিফিকেশন চালু হয়েছে!", reply_markup=home_kb())
         while uid in auto_tasks:
             user = get_user(uid)
             if user["daily"] >= limit_for(user):
                 auto_tasks.pop(uid, None)
-                await ctx.bot.send_message(chat_id, "❌ আজকের লিমিট শেষ, অটো নোটিফিকেশন বন্ধ করা হলো।", reply_markup=home_kb())
+                await ctx.bot.send_message(chat_id, "❌ দৈনিক লিমিট শেষ, অটো বন্ধ করা হলো।", reply_markup=home_kb())
                 return
-            
             for p in PAIRS:
-                if uid not in auto_tasks:
-                    return
+                if uid not in auto_tasks: return
                 cs = await fetch_candles(p)
-                if uid not in auto_tasks:
-                    return
-                d, sc, _, _ = analyze(cs)
+                d, _, _, _ = analyze(cs)
                 if d and uid in auto_tasks:
-                    await run_signal(ctx, chat_id, uid, p, quiet_no_trade=True)
-                    await asyncio.sleep(5)
-                await asyncio.sleep(2)
-            
-            await asyncio.sleep(5)
+                    await run_signal(ctx, chat_id, uid, p, quiet=True)
+                    await asyncio.sleep(10)
+                await asyncio.sleep(3)
+            await asyncio.sleep(10)
     except asyncio.CancelledError:
         pass
     finally:
         auto_tasks.pop(uid, None)
 
 
-# ==================== COMMAND HANDLERS ====================
-async def on_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+# ==================== COMMAND & CALLBACK ROUTERS ====================
+async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     u = update.effective_user
     get_user(u.id, u.full_name)
-    await update.message.reply_text(
-        "👋 স্বাগতম!\n🔥 **Asif Signals Bot Ultra (95%+)** বটে স্বাগতম।\n\nনিচের মেনু থেকে আপনার পছন্দমতো অপশন সিলেক্ট করুন বা ইনস্ট্যান্ট অটো মোড চালু করুন!",
-        parse_mode="Markdown", reply_markup=home_kb())
-
-async def cmd_signal(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    await on_callback_data_pairs(update, ctx)
-
-async def cmd_ai(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🤖 **Asif AI Engine v6.0**\n\nমার্কেট ট্রেন্ড ও স্ট্রং কনফ্লুয়েন্স এনালাইজ করার জন্য পুরোপুরি প্রস্তুত।", reply_markup=home_kb())
-
-async def cmd_future(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("📊 **Blackout Future List**\n\nআগামী ১ ঘণ্টার জন্য মার্কেটের সবথেকে হাই প্রবাবিলিটি পেয়ারগুলোর লিস্ট স্ক্যান করা হচ্ছে...", reply_markup=home_kb())
-
-async def cmd_checker(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("📈 **Signal Checker Active**\n\nসকল উইন/লস রেকর্ড নিখুঁতভাবে ট্র্যাকিং করা হচ্ছে।", reply_markup=home_kb())
-
-async def cmd_profile(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    u = update.effective_user
-    user = get_user(u.id, u.full_name)
-    t = user["wins"] + user["losses"]
-    wr = round(user["wins"] / t * 100, 1) if t else 0
-    plan = "ADMIN" if u.id in ADMIN_IDS else "PREMIUM" if is_premium(user) else "FREE"
-    lim = "∞" if u.id in ADMIN_IDS else limit_for(user)
-    await update.message.reply_text(
-        f"👤 নাম: {user['name']}\n🆔 আইডি: {u.id}\n💎 প্ল্যান: {plan}\n"
-        f"📊 ব্যবহার হয়েছে: {user['daily']}/{lim}\n✅ জয়: {user['wins']} | ❌ পরাজয়: {user['losses']} | উইন রেট: {wr}%",
-        reply_markup=home_kb())
-
-async def cmd_vip(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("💎 প্রিমিয়াম প্ল্যান এবং আনলিমিটেড সিগন্যাল পেতে এডমিনের সাথে যোগাযোগ করুন।", reply_markup=home_kb())
-
-async def cmd_language(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("🌐 বর্তমান ভাষা: **বাংলা (Bangla)** সিলেক্ট করা আছে।", reply_markup=home_kb())
-
-async def cmd_channel(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("📢 চ্যানেল সিগন্যাল ব্রডকাস্ট সিস্টেম কানেক্টেড আছে।", reply_markup=home_kb())
-
-async def cmd_stop(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    u = update.effective_user
-    task = auto_tasks.pop(u.id, None)
-    if task:
-        task.cancel()
-        await update.message.reply_text("⏹ অটো নোটিফিকেশন ইনস্ট্যান্ট বন্ধ করা হয়েছে।", reply_markup=home_kb())
-    else:
-        await update.message.reply_text("ℹ️ আপনার অটো মোড ইতিমধ্যে বন্ধ রয়েছে।", reply_markup=home_kb())
+    await update.message.reply_text("👋 স্বাগতম! **Asif Signals Bot Ultra** চালু আছে। নিচে মেনু ব্যবহার করুন:", parse_mode="Markdown", reply_markup=home_kb())
 
 async def cmd_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "ℹ️ **Asif Signals Bot — Help & Commands**\n\n"
-        "• /start - বটের হোম মেনু চালু করুন\n"
-        "• /signal - পেয়ার তালিকা থেকে সিগন্যাল নিন\n"
-        "• /ai - এআই ইঞ্জিন স্ট্যাটাস চেক করুন\n"
-        "• /future - মার্কেট ফিউচার স্ক্যান\n"
-        "• /checker - উইন/লস রেকর্ড চেকার\n"
-        "• /profile - আপনার স্ট্যাটাস ও উইন রেট দেখুন\n"
-        "• /vip - ভিআইপি প্ল্যান তথ্য\n"
-        "• /stop - ইনস্ট্যান্ট অটো মোড বন্ধ করুন\n"
-        "• /addpremium <id> <days> - (Admin Only) প্রিমিয়াম দিন\n"
-        "• /users - (Admin Only) মোট ইউজার দেখুন",
-        reply_markup=home_kb()
-    )
+    await update.message.reply_text("ℹ️ যেকোনো সিগন্যাল পেতে বা অটো চালু করতে নিচের হোম মেনু ব্যবহার করুন।", reply_markup=home_kb())
 
-
-# ==================== CALLBACK QUERY ROUTER ====================
 async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
     u = q.from_user
@@ -468,44 +296,26 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await q.answer()
     chat_id = q.message.chat_id
 
-    if q.data.startswith("pairs_page_"):
-        page = int(q.data.split("_")[-1])
-        per_page = 10
-        start_idx = page * per_page
-        end_idx = start_idx + per_page
-        current_pairs = PAIRS[start_idx:end_idx]
-
-        rows = [[B(p.replace("_otc", " OTC").replace("_", "/"), callback_data=f"p_{p}") for p in current_pairs[i:i + 2]]
-                for i in range(0, len(current_pairs), 2)]
-        
-        nav_buttons = []
-        if page > 0:
-            nav_buttons.append(B("⬅️ আগের পেজ", callback_data=f"pairs_page_{page-1}"))
-        if end_idx < len(PAIRS):
-            nav_buttons.append(B("➡️ পরবর্তী পেজ", callback_data=f"pairs_page_{page+1}"))
-        if nav_buttons:
-            rows.append(nav_buttons)
+    if q.data == "pairs_menu":
+        rows = [[B(p.replace("_otc", " OTC").replace("_", "/"), callback_data=f"p_{p}")] for p in PAIRS[:10]]
         rows.append([B("🏠 হোম মেনু", callback_data="home")])
-
         try:
-            await ctx.bot.edit_message_text(chat_id=chat_id, message_id=q.message.message_id,
-                                            text=f"💎 হাই-একিউরেসি পেয়ার নির্বাচন করুন (পেজ {page+1}):", reply_markup=M(rows))
+            await ctx.bot.edit_message_text(chat_id=chat_id, message_id=q.message.message_id, text="💎 পেয়ার সিলেক্ট করুন:", reply_markup=M(rows))
         except Exception:
-            pass
+            await ctx.bot.send_message(chat_id, "💎 পেয়ার সিলেক্ট করুন:", reply_markup=M(rows))
 
     elif q.data == "home":
         try:
-            await ctx.bot.edit_message_text(chat_id=chat_id, message_id=q.message.message_id,
-                                            text="🏠 প্রধান মেনু:", reply_markup=home_kb())
+            await ctx.bot.edit_message_text(chat_id=chat_id, message_id=q.message.message_id, text="🏠 প্রধান মেনু:", reply_markup=home_kb())
         except Exception:
             await ctx.bot.send_message(chat_id, "🏠 প্রধান মেনু:", reply_markup=home_kb())
 
     elif q.data == "auto":
         if u.id in auto_tasks:
-            await q.answer("অটো নোটিফিকেশন ইতিমধ্যে চালু আছে!", show_alert=True)
+            await q.answer("অটো ইতিমধ্যে চালু আছে!", show_alert=True)
             return
         if user["daily"] >= limit_for(user):
-            await ctx.bot.send_message(chat_id, "❌ আজকের লিমিট শেষ।")
+            await ctx.bot.send_message(chat_id, "❌ লিমিট শেষ।")
             return
         auto_tasks[u.id] = asyncio.create_task(auto_loop(ctx, chat_id, u.id))
 
@@ -513,22 +323,19 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         t = auto_tasks.pop(u.id, None)
         if t:
             t.cancel()
-            await ctx.bot.send_message(chat_id, "⏹ অটো নোটিফিকেশন ইনস্ট্যান্ট বন্ধ করা হয়েছে।", reply_markup=home_kb())
+            await ctx.bot.send_message(chat_id, "⏹ অটো মোড বন্ধ করা হয়েছে।", reply_markup=home_kb())
         else:
-            await ctx.bot.send_message(chat_id, "ℹ️ আপনার অটো মোড ইতিমধ্যে বন্ধ রয়েছে।", reply_markup=home_kb())
+            await ctx.bot.send_message(chat_id, "ℹ️ অটো মোড বন্ধই আছে।", reply_markup=home_kb())
 
     elif q.data.startswith("p_"):
-        if u.id in auto_tasks:
-            await q.answer("⏹ আগে অটো নোটিফিকেশন বন্ধ করুন", show_alert=True)
-            return
         if busy.get(u.id):
-            await q.answer("⏳ আগের সিগন্যালের ফলাফল আসা পর্যন্ত অপেক্ষা করুন", show_alert=True)
+            await q.answer("⏳ আগের সিগন্যাল প্রসেস হচ্ছে...", show_alert=True)
             return
         if user["daily"] >= limit_for(user):
             await ctx.bot.send_message(chat_id, "❌ আজকের লিমিট শেষ।")
             return
         busy[u.id] = True
-        await ctx.bot.send_message(chat_id, "🔍 হাই-একিউরেসি (95%+) ইঞ্জিন দ্বারা মার্কেট স্ক্যান করা হচ্ছে...")
+        await ctx.bot.send_message(chat_id, "🔍 মার্কেট স্ক্যান করা হচ্ছে...")
         await run_signal(ctx, chat_id, u.id, q.data[2:])
         busy.pop(u.id, None)
 
@@ -536,79 +343,21 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         t = user["wins"] + user["losses"]
         wr = round(user["wins"] / t * 100, 1) if t else 0
         plan = "ADMIN" if u.id in ADMIN_IDS else "PREMIUM" if is_premium(user) else "FREE"
-        lim = "∞" if u.id in ADMIN_IDS else limit_for(user)
-        await ctx.bot.send_message(
-            chat_id, f"👤 নাম: {user['name']}\n🆔 আইডি: {u.id}\n💎 প্ল্যান: {plan}\n"
-                     f"📊 ব্যবহার হয়েছে: {user['daily']}/{lim}\n✅ জয়: {user['wins']} | ❌ পরাজয়: {user['losses']} | উইন রেট: {wr}%",
-            reply_markup=home_kb())
+        await ctx.bot.send_message(chat_id, f"👤 নাম: {user['name']}\n💎 প্ল্যান: {plan}\n✅ জয়: {user['wins']} | ❌ লস: {user['losses']} | উইন রেট: {wr}%", reply_markup=home_kb())
 
     elif q.data == "vip":
-        await ctx.bot.send_message(chat_id, "💎 প্রিমিয়াম প্ল্যান নিতে এডমিনের সাথে যোগাযোগ করুন।", reply_markup=home_kb())
-
-
-async def on_callback_data_pairs(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    per_page = 10
-    current_pairs = PAIRS[0:per_page]
-    rows = [[B(p.replace("_otc", " OTC").replace("_", "/"), callback_data=f"p_{p}") for p in current_pairs[i:i + 2]]
-            for i in range(0, len(current_pairs), 2)]
-    rows.append([B("➡️ পরবর্তী পেজ", callback_data="pairs_page_1"), B("🏠 হোম মেনু", callback_data="home")])
-    await update.message.reply_text("💎 হাই-একিউরেসি পেয়ার নির্বাচন করুন:", reply_markup=M(rows))
-
-
-async def on_addpremium(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id not in ADMIN_IDS:
-        return
-    try:
-        uid, days = int(ctx.args[0]), int(ctx.args[1])
-    except (IndexError, ValueError):
-        await update.message.reply_text("ব্যবহারবিধি: /addpremium <user_id> <days>")
-        return
-    get_user(uid)
-    until = (dt.datetime.now(BD_TZ).date() + dt.timedelta(days=days)).isoformat()
-    with db() as c:
-        c.execute("UPDATE users SET premium_until=? WHERE user_id=?", (until, uid))
-    await update.message.reply_text(f"✅ {uid} আইডিটি {until} তারিখ পর্যন্ত প্রিমিয়াম করা হয়েছে।")
-
-
-async def on_users(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id not in ADMIN_IDS:
-        return
-    with db() as c:
-        n = c.execute("SELECT COUNT(*) FROM users").fetchone()[0]
-    await update.message.reply_text(f"👥 মোট ব্যবহারকারী: {n}")
+        await ctx.bot.send_message(chat_id, "💎 প্রিমিayan প্ল্যানের জন্য এডমিনের সাথে যোগাযোগ করুন।", reply_markup=home_kb())
 
 
 def main():
     setup_db()
     app = Application.builder().token(BOT_TOKEN).build()
-    
-    app.add_handler(CommandHandler("start", on_start))
-    app.add_handler(CommandHandler("signal", cmd_signal))
-    app.add_handler(CommandHandler("ai", cmd_ai))
-    app.add_handler(CommandHandler("future", cmd_future))
-    app.add_handler(CommandHandler("checker", cmd_checker))
-    app.add_handler(CommandHandler("profile", cmd_profile))
-    app.add_handler(CommandHandler("vip", cmd_vip))
-    app.add_handler(CommandHandler("language", cmd_language))
-    app.add_handler(CommandHandler("channel", cmd_channel))
-    app.add_handler(CommandHandler("stop", cmd_stop))
+    app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("help", cmd_help))
-    app.add_handler(CommandHandler("addpremium", on_addpremium))
-    app.add_handler(CommandHandler("users", on_users))
-    
     app.add_handler(CallbackQueryHandler(on_callback))
-
-    async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
-        print(f"Exception while handling an update: {context.error}")
-    app.add_error_handler(error_handler)
-
-    async def on_shutdown(_app):
-        for t in list(auto_tasks.values()):
-            t.cancel()
-    app.post_shutdown = on_shutdown
-    print("✅ Asif Signals Bot Fully Controlled & Started Successfully")
+    
+    print("✅ Bot is fully running with direct control.")
     app.run_polling(drop_pending_updates=True)
-
 
 if __name__ == "__main__":
     main()
