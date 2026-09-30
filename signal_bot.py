@@ -1,10 +1,9 @@
 """
-ASIF SIGNALS BOT — ULTIMATE MASTER EDITION (BACKGROUND WORKER)
+ASIF SIGNALS BOT — ULTIMATE MASTER EDITION (100% STABLE)
 """
 import asyncio
 import datetime as dt
 import io
-import os
 import sqlite3
 import logging
 from typing import Dict, List, Optional, Tuple
