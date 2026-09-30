@@ -1,11 +1,12 @@
 """
-Telegram M1 Signal Bot (Asif Signals Bot - Render Stable Edition)
+Telegram M1 Signal Bot (Asif Signals Bot - Render Fixed Edition)
 """
 import asyncio
 import datetime as dt
 import io
 import os
 import sqlite3
+import logging
 from typing import Dict, List, Optional, Tuple
 
 import aiohttp
@@ -15,6 +16,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 from telegram import InlineKeyboardButton as B, InlineKeyboardMarkup as M, Update
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
+
+# Logging setup
+logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # ==================== CONFIG ====================
 BOT_TOKEN = "8419845332:AAGtdmayLgS7uJNiKWnqL4YzsISyMicPsfQ"
@@ -237,7 +242,7 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("👋 স্বাগতম! **Asif Signals Bot** চালু আছে। নিচে মেনু ব্যবহার করুন:", parse_mode="Markdown", reply_markup=home_kb())
 
 async def cmd_help(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("ℹ️ সিগন্যাল পেতে বা অটো চালু করতে নিচের হোম মেনু ব্যবহার করুন।", reply_markup=home_kb())
+    await update.message.reply_text("ℹ️ সিগন্যাল পেতে বা অটো চালু করতে নিচের হোম মেনু ব্যবহার করুন.", reply_markup=home_kb())
 
 async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     q = update.callback_query
@@ -298,6 +303,8 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     elif q.data == "vip":
         await ctx.bot.send_message(chat_id, "💎 প্রিমিয়াম প্ল্যানের জন্য এডমিনের সাথে যোগাযোগ করুন।", reply_markup=home_kb())
 
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    logger.error("Exception while handling an update:", exc_info=context.error)
 
 def main():
     setup_db()
@@ -305,9 +312,9 @@ def main():
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("help", cmd_help))
     app.add_handler(CallbackQueryHandler(on_callback))
+    app.add_error_handler(error_handler)
     
     print("✅ Bot is fully running.")
-    # Render-এর টাইমআউট এড়াতে সরাসরি দীর্ঘ রান পল্লিঙ্গ ব্যবহার করা হচ্ছে
     app.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
