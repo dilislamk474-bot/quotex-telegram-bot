@@ -21,7 +21,7 @@ logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s
 logger = logging.getLogger(__name__)
 
 # ==================== CONFIG & OWNERSHIP ====================
-BOT_TOKEN = "8419845332:AAGtdmayLgS7uJNiKWnqL4YzsISyMicPsfQ" 
+BOT_TOKEN = "8419845332:AAE5GTHvYGt075KF1i9xR_C4Pl18J8qI64k" 
 OWNER_ID = 6713482506  # তোর অফিশিয়াল ওনার আইডি
 ADMIN_IDS = {OWNER_ID: True}
 DB_PATH = "bot.db"
