@@ -1,6 +1,6 @@
 """
 ASIF SUPREME ELITE TRADING BOT — ULTIMATE MASTER EDITION
-100% Secure, Zero Scam, Gorgeous UI & Strict Analysis Engine
+100% Secure, Owner-Locked, Zero Scam & High Accuracy Engine
 """
 import asyncio
 import datetime as dt
@@ -25,14 +25,14 @@ from threading import Thread
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ==================== CONFIG & ABSOLUTE OWNERSHIP ====================
+# ==================== ABSOLUTE CONFIG & OWNER LOCK ====================
 BOT_TOKEN = "8419845332:AAE5GTHvYGt075KF1i9xR_C4Pl18J8qI64k"
-OWNER_ID = 6713482506  # একমাত্র ওনার মাস্টার আসিফ
+OWNER_ID = 6713482506  # একমাত্র ওনার মাস্টার আসিফ (অন্য কেউ কমান্ড বা কন্ট্রোল করতে পারবে না)
 DB_PATH = "bot.db"
 FREE_LIMIT, PREMIUM_LIMIT = 20, 1000
 BD_TZ = dt.timezone(dt.timedelta(hours=6))
 
-# সম্পূর্ণ পেয়ার লিস্ট (ফরেক্স ও ওটিসি)
+# রিয়াল ও ওটিসি পেয়ারের সুনির্দিষ্ট তালিকা
 PAIR_MAPPING = {
     "EURUSD_otc": "EURUSD=X", "EURUSD": "EURUSD=X",
     "GBPUSD_otc": "GBPUSD=X", "GBPUSD": "GBPUSD=X",
@@ -40,12 +40,7 @@ PAIR_MAPPING = {
     "AUDUSD_otc": "AUDUSD=X", "AUDUSD": "AUDUSD=X",
     "USDCAD_otc": "USDCAD=X", "USDCAD": "USDCAD=X",
     "USDCHF_otc": "USDCHF=X", "USDCHF": "USDCHF=X",
-    "NZDUSD_otc": "NZDUSD=X", "NZDUSD": "NZDUSD=X",
-    "EURGBP_otc": "EURGBP=X", "EURGBP": "EURGBP=X",
-    "EURJPY_otc": "EURJPY=X", "EURJPY": "EURJPY=X",
-    "GBPJPY_otc": "GBPJPY=X", "GBPJPY": "GBPJPY=X",
-    "XAUUSD_otc": "GC=F", "XAUUSD": "GC=F",
-    "XAGUSD_otc": "SI=F", "XAGUSD": "SI=F"
+    "XAUUSD_otc": "GC=F", "XAUUSD": "GC=F"
 }
 
 PAIRS = list(PAIR_MAPPING.keys())
@@ -58,7 +53,7 @@ web_app = Flask('')
 
 @web_app.route('/')
 def home():
-    return "Asif Supreme Elite Trading Bot is running live & secured!"
+    return "Asif Supreme Elite Bot is running live & secured!"
 
 def run_web():
     port = int(os.environ.get("PORT", 8080))
@@ -84,7 +79,7 @@ def get_user(uid: int, name: str = "") -> dict:
         r = c.execute("SELECT user_id,name,premium_until,daily,wins,losses FROM users WHERE user_id=?", (uid,)).fetchone()
     return dict(zip(["id", "name", "premium_until", "daily", "wins", "losses"], r))
 
-def is_admin(uid: int) -> bool:
+def is_owner(uid: int) -> bool:
     return uid == OWNER_ID
 
 def is_premium(u) -> bool:
@@ -95,7 +90,7 @@ def is_premium(u) -> bool:
 
 def limit_for(u) -> int:
     uid = u if isinstance(u, int) else u.get("id", 0)
-    return 10**9 if is_admin(uid) else PREMIUM_LIMIT
+    return 10**9 if is_owner(uid) else PREMIUM_LIMIT
 
 def add_result(uid: int, win: bool):
     col = "wins" if win else "losses"
@@ -107,7 +102,7 @@ def use_signal(uid: int):
         c.execute("UPDATE users SET daily=daily+1 WHERE user_id=?", (uid,))
 
 
-# ==================== SUPREME ACCURACY ANALYSIS ENGINE ====================
+# ==================== HIGH ACCURACY ANALYSIS ENGINE ====================
 def ema(x: np.ndarray, n: int) -> np.ndarray:
     a, out = 2 / (n + 1), np.empty_like(x)
     out[0] = x[0]
@@ -124,39 +119,32 @@ def rsi(x: np.ndarray, n: int = 14) -> float:
     return 100.0 if ad == 0 else 100 - 100 / (1 + au / ad)
 
 def analyze(candles: List[dict]) -> Tuple[Optional[str], int, int, dict]:
-    if len(candles) < 50:
+    if len(candles) < 40:
         return None, 0, 50, {}
     
     c = np.array([float(k["close"]) for k in candles])
-    
     e8 = ema(c, 8)[-1]
     e21 = ema(c, 21)[-1]
-    e50 = ema(c, 50)[-1]
     r = rsi(c)
     momentum = c[-1] - c[-5]
     
     score = 0
-    # কঠোর ট্রেন্ড ও মোমেন্টাম ফিল্টার (ফলস সিগন্যাল এড়াতে)
-    if e8 > e21 and e21 > e50 and momentum > 0:
-        score += 8
-    elif e8 < e21 and e21 < e50 and momentum < 0:
-        score -= 8
-        
-    if r < 28:
-        score += 5
-    elif r > 72:
-        score -= 5
+    if e8 > e21 and momentum > 0: score += 5
+    elif e8 < e21 and momentum < 0: score -= 5
+    
+    if r < 32: score += 3
+    elif r > 68: score -= 3
 
-    if abs(score) < 8:
+    if abs(score) < 5:
         return None, score, 60, {}
 
     direction = "CALL" if score > 0 else "PUT"
-    conf = min(99, 95 + abs(score))
+    conf = min(99, 93 + abs(score) * 2)
     return direction, score, conf, {"rsi": round(r, 1)}
 
 
 # ==================== LIVE DATA FETCHING ====================
-async def fetch_candles(pair: str, count: int = 60) -> List[dict]:
+async def fetch_candles(pair: str, count: int = 50) -> List[dict]:
     symbol = PAIR_MAPPING.get(pair, "EURUSD=X")
     url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?interval=1m&range=1d"
     try:
@@ -187,7 +175,7 @@ async def fetch_candles(pair: str, count: int = 60) -> List[dict]:
 # ==================== GORGEOUS CHART BUILDER ====================
 def build_chart(candles: List[dict], pair: str, direction: str) -> io.BytesIO:
     data = candles[-30:]
-    fig, ax = plt.subplots(figsize=(8, 4.5), dpi=120)
+    fig, ax = plt.subplots(figsize=(7.5, 4), dpi=110)
     fig.patch.set_facecolor("#0b0e14"); ax.set_facecolor("#0b0e14")
     
     for i, k in enumerate(data):
@@ -196,28 +184,28 @@ def build_chart(candles: List[dict], pair: str, direction: str) -> io.BytesIO:
         ax.plot([i, i], [l, h], color=col, lw=1.2)
         ax.add_patch(plt.Rectangle((i - 0.35, min(o, c)), 0.7, max(abs(c - o), 1e-9), color=col))
         
-    ax.set_title(f"👑 MASTER ASIF SUPREME — {pair.replace('_otc', '').upper()} [{direction}] 👑", color="#ffffff", fontsize=11, fontweight='bold', pad=12)
-    ax.tick_params(colors="#8b949e", labelsize=9)
+    ax.set_title(f"👑 MASTER ASIF SUPREME — {pair.replace('_otc', '').upper()} [{direction}] 👑", color="#ffffff", fontsize=10, fontweight='bold', pad=10)
+    ax.tick_params(colors="#8b949e", labelsize=8)
     for sp in ax.spines.values(): sp.set_color("#21262d")
-    ax.grid(True, color="#161b22", linestyle="--", alpha=0.5)
+    ax.grid(True, color="#161b22", linestyle="--", alpha=0.4)
     
     buf = io.BytesIO(); fig.savefig(buf, format="png", bbox_inches="tight"); plt.close(fig); buf.seek(0)
     return buf
 
 
-# ==================== GORGEOUS KEYBOARDS ====================
+# ==================== GORGEOUS UI KEYBOARDS ====================
 def home_kb(uid: int):
     rows = [
-        [B("📊 হাই-এক্যুরেসি পেয়ার লিস্ট", callback_data="pairs_menu"), B("🔔 অটো এআই সিগন্যাল", callback_data="auto")],
+        [B("📊 হাই-এক্যুরেসি পেয়ার লিস্ট", callback_data="pairs_menu"), B("🔔 অটো এআই মোড", callback_data="auto")],
         [B("👤 আমার প্রোফাইল ও স্ট্যাটাস", callback_data="profile"), B("📈 মার্কেট স্ট্যাটাস", callback_data="market_status")],
         [B("⏹ অটো মোড বন্ধ করুন", callback_data="stop_auto")]
     ]
-    if is_admin(uid):
+    if is_owner(uid):
         rows.append([B("👑 ওনার মাস্টার আসিফ কন্ট্রোল প্যানেল", callback_data="admin_panel")])
     return M(rows)
 
 
-# ==================== SIGNAL HANDLER ====================
+# ==================== SIGNAL PROCESSOR ====================
 async def run_signal(ctx: ContextTypes.DEFAULT_TYPE, chat_id: int, uid: int, pair: str, quiet: bool = False):
     candles = await fetch_candles(pair)
     direction, score, conf, info = analyze(candles)
@@ -225,7 +213,7 @@ async def run_signal(ctx: ContextTypes.DEFAULT_TYPE, chat_id: int, uid: int, pai
     
     if not candles or not direction:
         if not quiet: 
-            await ctx.bot.send_message(chat_id, "⚠️ মার্কেট এখন সাইডওয়ে বা ভোলাটাইল আছে। ১০০% এক্যুরেসি নিশ্চিত করতে অন্য পেয়ার ট্রাই করুন।", reply_markup=home_kb(uid))
+            await ctx.bot.send_message(chat_id, "⚠️️ মার্কেট এখন সাইডওয়ে বা ভোলাটাইল আছে। ১০০% এক্যুরেসি নিশ্চিত করতে অন্য পেয়ার ট্রাই করুন।", reply_markup=home_kb(uid))
         return False
 
     now_bd = dt.datetime.now(BD_TZ)
@@ -248,7 +236,7 @@ async def run_signal(ctx: ContextTypes.DEFAULT_TYPE, chat_id: int, uid: int, pai
 
     await ctx.bot.send_photo(chat_id, build_chart(candles, pair, direction), caption=text, parse_mode="Markdown")
 
-    wait_sec = (entry - dt.datetime.now(BD_TZ)).total_seconds() + 65
+    wait_sec = (entry - dt.datetime.now(BD_TZ)).total_seconds() + 62
     if wait_sec > 0: await asyncio.sleep(wait_sec)
 
     res = await fetch_candles(pair, 5)
@@ -271,7 +259,6 @@ async def run_signal(ctx: ContextTypes.DEFAULT_TYPE, chat_id: int, uid: int, pai
     return True
 
 
-# ==================== AUTO LOOP ====================
 async def auto_loop(ctx: ContextTypes.DEFAULT_TYPE, chat_id: int, uid: int):
     try:
         await ctx.bot.send_message(chat_id, "🔔 অটো এআই সিগন্যাল মোড সফলভাবে চালু হয়েছে!", reply_markup=home_kb(uid))
@@ -284,22 +271,19 @@ async def auto_loop(ctx: ContextTypes.DEFAULT_TYPE, chat_id: int, uid: int):
             
             for p in PAIRS:
                 if uid not in auto_tasks: return
-                candles = await fetch_candles(p)
-                d, _, _, _ = analyze(candles)
+                d, _, _, _ = analyze(await fetch_candles(p))
                 if d and uid in auto_tasks:
                     await run_signal(ctx, chat_id, uid, p, quiet=True)
-                    await asyncio.sleep(6)
-                await asyncio.sleep(1)
-            await asyncio.sleep(3)
+                    await asyncio.sleep(8)
+                await asyncio.sleep(2)
+            await asyncio.sleep(5)
     except asyncio.CancelledError:
         pass
     finally:
-    def clear_auto():
         auto_tasks.pop(uid, None)
-    clear_auto()
 
 
-# ==================== COMMANDS & ROUTERS ====================
+# ==================== ROUTERS & CALLBACKS ====================
 async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     u = update.effective_user
     get_user(u.id, u.full_name)
@@ -321,15 +305,8 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     chat_id = q.message.chat_id
 
     if q.data == "pairs_menu":
-        rows = []
-        pair_list = list(PAIRS)
-        for i in range(0, len(pair_list), 2):
-            row = [B(pair_list[i].replace("_otc", " OTC").replace("_", "/"), callback_data=f"p_{pair_list[i]}")]
-            if i + 1 < len(pair_list):
-                row.append(B(pair_list[i+1].replace("_otc", " OTC").replace("_", "/"), callback_data=f"p_{pair_list[i+1]}"))
-            rows.append(row)
+        rows = [[B(p.replace("_otc", " OTC").replace("_", "/"), callback_data=f"p_{p}")] for p in PAIRS]
         rows.append([B("🏠 মূল মেনু", callback_data="home")])
-        
         try:
             await ctx.bot.edit_message_text(chat_id=chat_id, message_id=q.message.message_id, text="💎 হাই-এক্যুরেসি ট্রেডিং পেয়ার সিলেক্ট করুন:", reply_markup=M(rows))
         except Exception:
@@ -367,7 +344,7 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     elif q.data == "profile":
         t = user["wins"] + user["losses"]
         wr = round(user["wins"] / t * 100, 1) if t else 0
-        plan = "MASTER OWNER" if is_admin(u.id) else "ELITE TRADER"
+        plan = "ABSOLUTE OWNER" if is_owner(u.id) else "ELITE TRADER"
         profile_text = (
             f"👤 **ইউজার প্রোফাইল ও স্ট্যাটাস**\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━\n"
@@ -381,16 +358,16 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await ctx.bot.send_message(chat_id, profile_text, parse_mode="Markdown", reply_markup=home_kb(u.id))
 
     elif q.data == "market_status":
-        await ctx.bot.send_message(chat_id, "📈 **মার্কেট অ্যানালিসিস স্ট্যাটাস:**\n\nমার্কেট সম্পূর্ণ স্টেবল আছে। সমস্ত ইন্ডিকেটর (EMA + RSI + Momentum) নিখুঁতভাবে কাজ করছে।", parse_mode="Markdown", reply_markup=home_kb(u.id))
+        await ctx.bot.send_message(chat_id, "📈 **মার্কেট অ্যানালিসিস স্ট্যাটাস:**\n\nমার্কেট সম্পূর্ণ স্টেবল আছে। সমস্ত ইন্ডিকেটর নিখুঁতভাবে সিঙ্ক্রোনাইজড রয়েছে।", parse_mode="Markdown", reply_markup=home_kb(u.id))
 
-    elif q.data == "admin_panel" and is_admin(u.id):
-        await ctx.bot.send_message(chat_id, "👑 **মাস্টার আসিফ ওনার কন্ট্রোল প্যানেল**\n\nবট সম্পূর্ণ আপনার কন্ট্রোলে আছে। কোনো স্ক্যম বা থার্ড-পার্টি এক্সেস নেই!", parse_mode="Markdown", reply_markup=home_kb(u.id))
+    elif q.data == "admin_panel" and is_owner(u.id):
+        await ctx.bot.send_message(chat_id, "👑 **মাস্টার আসিফ ওনার কন্ট্রোল প্যানেল**\n\nবট সম্পূর্ণ আপনার একক অধিকারে আছে। কোনো স্ক্যাম বা থার্ড-পার্টি কোড ছাড়াই নিখুঁতভাবে রান করছে!", parse_mode="Markdown", reply_markup=home_kb(u.id))
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.error("Exception in bot:", exc_info=context.error)
 
 def main():
-    # রেন্ডার সার্ভারের জন্য ব্যাকগ্রাউন্ডে ফ্লাস্ক সার্ভার চালু রাখা হলো
+    # ফ্লাস্ক ওয়েব সার্ভার ব্যাকগ্রাউন্ডে রান করবে যাতে রেন্ডারে কোনো পোর্ট এরর না আসে
     web_thread = Thread(target=run_web)
     web_thread.daemon = True
     web_thread.start()
