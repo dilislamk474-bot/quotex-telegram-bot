@@ -1,5 +1,5 @@
 """
-ASIF SIGNALS BOT — ULTIMATE MASTER EDITION (100% SECURE & PRO)
+ASIF SIGNALS BOT — ULTIMATE MASTER EDITION (BACKGROUND WORKER)
 """
 import asyncio
 import datetime as dt
@@ -17,17 +17,13 @@ import numpy as np
 from telegram import InlineKeyboardButton as B, InlineKeyboardMarkup as M, Update
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
 
-from flask import Flask
-from threading import Thread
-
 # Logging setup
 logging.basicConfig(format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # ==================== CONFIG & OWNERSHIP ====================
-# এখানে তোর নতুন সিকিউর টোকেন বসানো আছে (শুধুমাত্র তুই কন্ট্রোল করবি)
 BOT_TOKEN = "8419845332:AAGtdmayLgS7uJNiKWnqL4YzsISyMicPsfQ" 
-OWNER_ID = 6713482506  # তোর টেলিগ্রাম আইডি (অফিসিয়াল ওনার)
+OWNER_ID = 6713482506  # তোর অফিশিয়াল ওনার আইডি
 ADMIN_IDS = {OWNER_ID: True}
 DB_PATH = "bot.db"
 FREE_LIMIT, PREMIUM_LIMIT = 10, 50
@@ -46,18 +42,6 @@ PAIR_MAPPING = {
 PAIRS = list(PAIR_MAPPING.keys())
 busy: Dict[int, bool] = {}
 auto_tasks: Dict[int, asyncio.Task] = {}
-
-
-# ==================== WEB SERVER FOR RENDER ====================
-web_app = Flask('')
-
-@web_app.route('/')
-def home():
-    return "👑 Asif Signals Bot is Online & Secured!"
-
-def run_web():
-    port = int(os.environ.get("PORT", 8080))
-    web_app.run(host='0.0.0.0', port=port)
 
 
 # ==================== DATABASE & SECURITY ====================
@@ -99,7 +83,7 @@ def use_signal(uid: int):
         c.execute("UPDATE users SET daily=daily+1 WHERE user_id=?", (uid,))
 
 
-# ==================== ADVANCED HIGH-ACCURACY ANALYSIS ====================
+# ==================== ADVANCED ANALYSIS ====================
 def ema(x: np.ndarray, n: int) -> np.ndarray:
     a, out = 2 / (n + 1), np.empty_like(x)
     out[0] = x[0]
@@ -120,7 +104,6 @@ def analyze(candles: List[dict]) -> Tuple[Optional[str], int, int, dict]:
         return None, 0, 50, {}
     c = np.array([float(k["close"]) for k in candles])
     
-    # Advanced Multi-Indicator Filter (EMA 8/21 + RSI + Momentum)
     e8, e21 = ema(c, 8)[-1], ema(c, 21)[-1]
     r = rsi(c)
     momentum = c[-1] - c[-3]
@@ -129,12 +112,12 @@ def analyze(candles: List[dict]) -> Tuple[Optional[str], int, int, dict]:
     if e8 > e21 and momentum > 0: score += 4
     elif e8 < e21 and momentum < 0: score -= 4
     
-    if r < 30: score += 3  # Oversold -> Strong CALL
-    elif r > 70: score -= 3 # Overbought -> Strong PUT
+    if r < 30: score += 3  
+    elif r > 70: score -= 3 
     elif 35 <= r <= 65: score += 1 if e8 > e21 else -1
 
     if abs(score) < 2:
-        return None, score, 60, {} # Filter out weak signals to ensure high accuracy
+        return None, score, 60, {} 
 
     direction = "CALL" if score > 0 else "PUT"
     conf = min(98, 85 + abs(score) * 3)
@@ -170,7 +153,7 @@ async def fetch_candles(pair: str, count: int = 50) -> List[dict]:
         return []
 
 
-# ==================== GORGEOUS CHART GENERATOR ====================
+# ==================== CHART GENERATOR ====================
 def build_chart(candles: List[dict], pair: str, direction: str) -> io.BytesIO:
     data = candles[-30:]
     fig, ax = plt.subplots(figsize=(8, 4.5), dpi=120)
@@ -191,7 +174,7 @@ def build_chart(candles: List[dict], pair: str, direction: str) -> io.BytesIO:
     return buf
 
 
-# ==================== GORGEOUS KEYBOARDS ====================
+# ==================== KEYBOARDS ====================
 def home_kb(uid: int):
     rows = [
         [B("📊 প্রফেশনাল সিগন্যাল নিন", callback_data="pairs_menu"), B("🔔 অটো সিগন্যাল (AI)", callback_data="auto")],
@@ -203,7 +186,7 @@ def home_kb(uid: int):
     return M(rows)
 
 
-# ==================== SIGNAL HANDLER (ACCURATE) ====================
+# ==================== SIGNAL HANDLER ====================
 async def run_signal(ctx: ContextTypes.DEFAULT_TYPE, chat_id: int, uid: int, pair: str, quiet: bool = False):
     candles = await fetch_candles(pair)
     direction, score, conf, info = analyze(candles)
@@ -237,7 +220,6 @@ async def run_signal(ctx: ContextTypes.DEFAULT_TYPE, chat_id: int, uid: int, pai
     wait_sec = (entry - dt.datetime.now(BD_TZ)).total_seconds() + 65
     if wait_sec > 0: await asyncio.sleep(wait_sec)
 
-    # Accurate result verification using fresh candle fetch
     res = await fetch_candles(pair, 5)
     if not res: return True
     cl = float(res[-1]["close"])
