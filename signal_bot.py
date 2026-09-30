@@ -44,7 +44,7 @@ ADMIN_IDS = {6713482506: True}
 DB_PATH = "bot.db"
 FREE_LIMIT, PREMIUM_LIMIT = 5, 25
 
-MIN_SCORE = 4  # High Accuracy er jonno score 4 kora holo (Sudhu matro strong setup aslei signal dibe)
+MIN_SCORE = 4  
 BD_TZ = dt.timezone(dt.timedelta(hours=6))
 
 PAIR_MAPPING = {
@@ -166,7 +166,6 @@ def analyze(candles: List[dict]) -> Tuple[Optional[str], int, int, dict]:
 
     score, why, factors = 0, [], 10
     
-    # Ultra Strict Trend Rules for High Accuracy
     if e8 > e21 and e21 > e50:
         score += 2; why.append("Strong Bullish EMA Alignment")
     elif e8 < e21 and e21 < e50:
@@ -194,7 +193,7 @@ def analyze(candles: List[dict]) -> Tuple[Optional[str], int, int, dict]:
         score -= 1; why.append("Bollinger Upper Band Resistance Touch")
 
     direction = "CALL" if score >= MIN_SCORE else "PUT" if score <= -MIN_SCORE else None
-    base_conf = 82 + min(abs(score) * 4, 15) # High confidence rating
+    base_conf = 82 + min(abs(score) * 4, 15)
 
     return direction, score, base_conf, {"rsi": round(r, 1), "why": why, "factors": factors}
 
@@ -296,7 +295,6 @@ async def run_signal(ctx: ContextTypes.DEFAULT_TYPE, chat_id: int, uid: int, pai
         now_bd = dt.datetime.now(BD_TZ)
         entry = (now_bd + dt.timedelta(minutes=1)).replace(second=0, microsecond=0)
         
-        # Exact entry price lock for smart result tracking
         entry_price = float(candles[-1]["close"])
         use_signal(uid)
         
@@ -338,7 +336,6 @@ async def run_signal(ctx: ContextTypes.DEFAULT_TYPE, chat_id: int, uid: int, pai
         target = res[-1]
         cl = float(target["close"])
         
-        # Smart comparison based on locked entry price to ensure correct Win/Loss display
         win = cl > entry_price if direction == "CALL" else cl < entry_price
         add_result(uid, win)
         
@@ -370,7 +367,7 @@ async def auto_loop(ctx: ContextTypes.DEFAULT_TYPE, chat_id: int, uid: int):
             for p in PAIRS:
                 cs = await fetch_candles(p)
                 d, sc, _, _ = analyze(cs)
-                if d:  # High score match holei pathabe
+                if d:
                     await run_signal(ctx, chat_id, uid, p, quiet_no_trade=True)
                     await asyncio.sleep(60)
                 await asyncio.sleep(4)
@@ -495,6 +492,11 @@ def main():
     app.add_handler(CommandHandler("addpremium", on_addpremium))
     app.add_handler(CommandHandler("users", on_users))
     app.add_handler(CallbackQueryHandler(on_callback))
+
+    # Error Handler যুক্ত করা হয়েছে যাতে ব্যাকগ্রাউন্ড এরর আসলে বট ক্র্যাশ না করে
+    async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
+        print(f"Exception while handling an update: {context.error}")
+    app.add_error_handler(error_handler)
 
     async def on_shutdown(_app):
         for t in list(auto_tasks.values()):
