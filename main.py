@@ -1,199 +1,314 @@
-# ============================================================
-# QUOTEX DEMO BOT - MOBILE FRIENDLY
-# ============================================================
+"""
+Smart Market Analysis Bot - Big_Brother_ai_signal
+Install:  pip install python-telegram-bot aiohttp numpy pandas
+Run:      python signal_bot.py
+"""
+import asyncio
+import datetime as dt
+import sqlite3
+from typing import Dict, List, Optional, Tuple
 
-# ---------- STEP 1: Install ----------
-print("লাইব্রেরি ইনস্টল হচ্ছে... (২-৩ মিনিট লাগবে)")
-!pip install -q pyquotex smartmoneyconcepts pandas numpy colorama
-print("✅ Install সম্পন্ন!\n")
+import aiohttp
+import numpy as np
+import pandas as pd
+from telegram import InlineKeyboardButton as B, InlineKeyboardMarkup as M, Update
+from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
 
-# ---------- STEP 2: Imports ----------
-import asyncio, pandas as pd, numpy as np
-from datetime import datetime
+# ==================== CONFIG ====================
+BOT_TOKEN = "8857147364:AAEmPxY0mzTcZdDzY-XC_HD5Vz23fqeYXec"
+ADMIN_IDS = {8857147364}            # Your Telegram user id(s)
+DB_PATH = "bot.db"
+API_BASE = "https://quotexcandles.bdtraderpro.xyz/proversion/quotexcandles/Qx.php"
+FREE_LIMIT, PREMIUM_LIMIT = 3, 30
+MIN_SCORE = 3                      # Score threshold for signal
+PAIRS = ["EURUSD_otc", "GBPUSD_otc", "USDJPY_otc", "AUDUSD_otc", "USDCAD_otc",
+         "XAUUSD_otc", "BTCUSD_otc", "ETHUSD_otc", "USDBDT_otc", "USDINR_otc"]
 
-# ============================================================
-# ⚠️ এখানে আপনার ডেমো অ্যাকাউন্টের তথ্য বসান
-# ============================================================
-EMAIL = "এখানে_তোমার_ডেমো_ইমেইল"
-PASSWORD = "এখানে_তোমার_ডেমো_পাসওয়ার্ড"
+busy: Dict[int, bool] = {}
 
-# ============================================================
-# সেটিংস (এগুলো পরিবর্তন করতে পারেন)
-# ============================================================
-ASSET = "EURUSD_otc"        # অ্যাসেট
-TIMEFRAME = 60              # ৬০ সেকেন্ড ক্যান্ডেল
-TRADE_DURATION = 60         # ট্রেড ৬০ সেকেন্ডের
-MIN_CONFIDENCE = 65         # এর নিচে ট্রেড করবে না
 
-SIGNAL_ONLY = True          # True = শুধু সিগন্যাল দেখাবে (নিরাপদ!)
-                            # False = ডেমোতে ট্রেড বসাবে
+# ==================== DATABASE ====================
+def db():
+    return sqlite3.connect(DB_PATH)
 
-BASE_AMOUNT = 1.0           # প্রতি ট্রেডে $১
-MAX_TRADES = 20             # সেশন প্রতি সর্বোচ্চ ২০ ট্রেড
-MAX_LOSS = 50.0             # $৫০ লস হলে বন্ধ
 
-# ============================================================
-# সিগন্যাল ইঞ্জিন
-# ============================================================
-def analyze(df):
-    if len(df) < 50:
-        return {"dir": "NONE", "conf": 0, "reasons": []}
-    
-    df = df.copy()
-    df["ema20"] = df["close"].ewm(span=20).mean()
-    df["ema50"] = df["close"].ewm(span=50).mean()
-    
-    delta = df["close"].diff()
-    gain = delta.where(delta > 0, 0).rolling(14).mean()
-    loss = -delta.where(delta < 0, 0).rolling(14).mean()
-    rs = gain / loss.replace(0, np.nan)
-    df["rsi"] = 100 - (100 / (1 + rs))
-    
-    last, prev = df.iloc[-1], df.iloc[-2]
-    
-    bull, bear, reasons = 0, 0, []
-    
-    # Engulfing
-    if prev["close"] < prev["open"] and last["close"] > last["open"] and last["close"] > prev["open"]:
-        bull += 2; reasons.append("Bullish Engulfing")
-    if prev["close"] > prev["open"] and last["close"] < last["open"] and last["close"] < prev["open"]:
-        bear += 2; reasons.append("Bearish Engulfing")
-    
-    # Trend
-    if last["close"] > last["ema20"] > last["ema50"]:
-        bull += 1; reasons.append("Uptrend")
-    elif last["close"] < last["ema20"] < last["ema50"]:
-        bear += 1; reasons.append("Downtrend")
-    
-    # RSI
-    if last["rsi"] < 30:
-        bull += 1; reasons.append(f"RSI oversold {last['rsi']:.0f}")
-    elif last["rsi"] > 70:
-        bear += 1; reasons.append(f"RSI overbought {last['rsi']:.0f}")
-    
-    if bull >= 3 and bull > bear:
-        return {"dir": "CALL", "conf": min(100, bull*20), "reasons": reasons}
-    if bear >= 3 and bear > bull:
-        return {"dir": "PUT", "conf": min(100, bear*20), "reasons": reasons}
-    return {"dir": "NONE", "conf": 0, "reasons": reasons}
+def setup_db():
+    with db() as c:
+        c.execute("""CREATE TABLE IF NOT EXISTS users(
+            user_id INTEGER PRIMARY KEY, name TEXT DEFAULT '',
+            premium_until TEXT DEFAULT '', daily INTEGER DEFAULT 0, day TEXT DEFAULT '',
+            wins INTEGER DEFAULT 0, losses INTEGER DEFAULT 0)""")
 
-# ============================================================
-# মেইন বট
-# ============================================================
-async def run_bot():
-    from pyquotex.stable_api import Quotex
+
+def get_user(uid: int, name: str = "") -> dict:
+    today = dt.date.today().isoformat()
+    with db() as c:
+        c.execute("INSERT OR IGNORE INTO users(user_id,name,day) VALUES(?,?,?)", (uid, name, today))
+        c.execute("UPDATE users SET daily=0, day=? WHERE user_id=? AND day!=?", (today, uid, today))
+        r = c.execute("SELECT user_id,name,premium_until,daily,wins,losses FROM users WHERE user_id=?",
+                      (uid,)).fetchone()
+    return dict(zip(["id", "name", "premium_until", "daily", "wins", "losses"], r))
+
+
+def is_premium(u: dict) -> bool:
+    return u["id"] in ADMIN_IDS or (u["premium_until"] and u["premium_until"] >= dt.date.today().isoformat())
+
+
+def limit_for(u: dict) -> int:
+    return 10**6 if u["id"] in ADMIN_IDS else PREMIUM_LIMIT if is_premium(u) else FREE_LIMIT
+
+
+def add_result(uid: int, win: bool):
+    col = "wins" if win else "losses"
+    with db() as c:
+        c.execute(f"UPDATE users SET {col}={col}+1 WHERE user_id=?", (uid,))
+
+
+def use_signal(uid: int):
+    with db() as c:
+        c.execute("UPDATE users SET daily=daily+1 WHERE user_id=?", (uid,))
+
+
+# ==================== ANALYSIS ENGINE (SMC, MMC, Price Action & Indicators) ====================
+def ema(x: np.ndarray, n: int) -> np.ndarray:
+    a, out = 2 / (n + 1), np.empty_like(x)
+    out[0] = x[0]
+    for i in range(1, len(x)):
+        out[i] = a * x[i] + (1 - a) * out[i - 1]
+    return out
+
+
+def rsi(x: np.ndarray, n: int = 14) -> float:
+    d = np.diff(x)
+    up, dn = np.where(d > 0, d, 0.0), np.where(d < 0, -d, 0.0)
+    au, ad = up[:n].mean(), dn[:n].mean()
+    for i in range(n, len(d)):
+        au, ad = (au * (n - 1) + up[i]) / n, (ad * (n - 1) + dn[i]) / n
+    return 100.0 if ad == 0 else 100 - 100 / (1 + au / ad)
+
+
+def analyze_advanced(df: pd.DataFrame) -> Tuple[int, List[str]]:
+    score = 0
+    reasons = []
     
-    print("="*50)
-    print("  QUOTEX BOT চালু হচ্ছে")
-    print("="*50)
-    print(f"অ্যাসেট: {ASSET}")
-    print(f"সিগন্যাল অনলি: {SIGNAL_ONLY}")
-    print(f"প্রতি ট্রেড: ${BASE_AMOUNT}\n")
+    if len(df) < 30:
+        return score, reasons
+
+    last = df.iloc[-1]
+    prev = df.iloc[-2]
     
-    client = Quotex(email=EMAIL, password=PASSWORD)
-    ok, msg = await client.connect()
-    if not ok:
-        print(f"❌ কানেক্ট ফেইল: {msg}")
-        return
+    o, h, l, c = last["open"], last["high"], last["low"], last["close"]
+    body = abs(c - o)
     
-    bal = await client.get_balance()
-    print(f"✅ কানেক্টেড! ব্যালেন্স: ${bal}\n")
+    # 1. Price Action: Engulfing & Pin Bars
+    if prev["close"] < prev["open"] and c > o and c > prev["open"]:
+        score += 2; reasons.append("Bullish Engulfing")
+    elif prev["close"] > prev["open"] and c < o and c < prev["open"]:
+        score -= 2; reasons.append("Bearish Engulfing")
+
+    upper_shadow = h - max(o, c)
+    lower_shadow = min(o, c) - l
+    if lower_shadow > (2 * body) and upper_shadow < body:
+        score += 2; reasons.append("Pin Bar Rejection (Bullish)")
+    elif upper_shadow > (2 * body) and lower_shadow < body:
+        score -= 2; reasons.append("Pin Bar Rejection (Bearish)")
+
+    # 2. SMC & MMC Concepts (Liquidity Sweep & Order Block simulation via extremes)
+    recent_high = df["high"].iloc[-25:-1].max()
+    recent_low = df["low"].iloc[-25:-1].min()
     
-    await client.start_candles_stream(ASSET, TIMEFRAME, 200)
-    print(f"📊 {ASSET} ডেটা স্ট্রিম শুরু...\n")
+    if l <= recent_low * 1.0001 and c > o:
+        score += 2; reasons.append("SMC Support / Liquidity Grab")
+    elif h >= recent_high * 0.9999 and c < o:
+        score -= 2; reasons.append("SMC Resistance / Supply Zone")
+
+    return score, reasons
+
+
+def analyze(candles: List[dict]) -> Tuple[Optional[str], int, dict]:
+    if len(candles) < 60:
+        return None, 0, {}
     
-    trades, wins, total_pnl = 0, 0, 0.0
-    last_sig_time = 0
+    df = pd.DataFrame(candles)
+    for col in ["open", "high", "low", "close"]:
+        df[col] = df[col].astype(float)
     
+    arr_c = df["close"].values
+    e8, e21, e50 = ema(arr_c, 8)[-1], ema(arr_c, 21)[-1], ema(arr_c, 50)[-1]
+    macd = ema(arr_c, 12) - ema(arr_c, 26)
+    hist = (macd - ema(macd, 9))[-1]
+    r = rsi(arr_c)
+    mid, sd = arr_c[-20:].mean(), arr_c[-20:].std()
+    price = arr_c[-1]
+
+    score, why = 0, []
+    
+    # Indicator Votes
+    if e8 > e21 > e50:
+        score += 2; why.append("EMA Uptrend")
+    elif e8 < e21 < e50:
+        score -= 2; why.append("EMA Downtrend")
+    if hist > 0:
+        score += 1; why.append("MACD Bullish")
+    elif hist < 0:
+        score -= 1; why.append("MACD Bearish")
+    if r < 30:
+        score += 1; why.append(f"RSI Oversold ({r:.0f})")
+    elif r > 70:
+        score -= 1; why.append(f"RSI Overbought ({r:.0f})")
+    if price <= mid - 2 * sd:
+        score += 1; why.append("Lower Bollinger Band")
+    elif price >= mid + 2 * sd:
+        score -= 1; why.append("Upper Bollinger Band")
+
+    # Combine SMC, MMC & Price Action
+    adv_score, adv_reasons = analyze_advanced(df)
+    score += adv_score
+    why.extend(adv_reasons)
+
+    direction = "CALL" if score >= MIN_SCORE else "PUT" if score <= -MIN_SCORE else None
+    return direction, score, {"rsi": round(r, 1), "why": why}
+
+
+# ==================== DATA FETCH ====================
+async def fetch_candles(pair: str, count: int = 100) -> List[dict]:
+    url = f"{API_BASE}?pair={pair}&timeframe=M1&count={count}"
     try:
-        while True:
-            await asyncio.sleep(5)
-            
-            raw = await client.get_realtime_candles(ASSET, TIMEFRAME)
-            if not raw:
-                continue
-            
-            rows = [{"time": pd.to_datetime(int(t), unit="s"),
-                     "open": c["open"], "high": c["high"],
-                     "low": c["low"], "close": c["close"],
-                     "volume": c.get("volume", 0)} for t, c in raw.items()]
-            df = pd.DataFrame(rows).sort_values("time").reset_index(drop=True).iloc[:-1]
-            
-            if len(df) < 50:
-                continue
-            
-            sig = analyze(df)
-            if sig["dir"] == "NONE":
-                continue
-            
-            now = datetime.now().timestamp()
-            if now - last_sig_time < 120:
-                continue
-            last_sig_time = now
-            
-            # সিগন্যাল প্রিন্ট
-            emoji = "🟢" if sig["dir"] == "CALL" else "🔴"
-            print(f"\n{'='*50}")
-            print(f"{emoji} সিগন্যাল: {sig['dir']}  |  কনফিডেন্স: {sig['conf']}%")
-            print(f"💰 প্রাইস: {df.iloc[-1]['close']}")
-            print(f"🕐 সময়: {datetime.now().strftime('%H:%M:%S')}")
-            for r in sig["reasons"]:
-                print(f"   • {r}")
-            print(f"{'='*50}")
-            
-            if SIGNAL_ONLY:
-                continue
-            
-            if sig["conf"] < MIN_CONFIDENCE:
-                print(f"⏭️ কনফিডেন্স কম, স্কিপ করছি")
-                continue
-            
-            if trades >= MAX_TRADES or total_pnl <= -MAX_LOSS:
-                print("🛑 সীমা শেষ। বট বন্ধ।")
-                break
-            
-            # ট্রেড
-            print(f"🚀 ট্রেড: ${BASE_AMOUNT} {sig['dir']}")
-            try:
-                ok2, info = await client.buy(
-                    amount=BASE_AMOUNT, asset=ASSET,
-                    direction=sig["dir"].lower(), duration=TRADE_DURATION
-                )
-                if not ok2:
-                    print(f"❌ রিজেক্ট: {info}")
-                    continue
-                
-                tid = info.get("id") if isinstance(info, dict) else info
-                print(f"⏳ অপেক্ষা {TRADE_DURATION}s...")
-                win = await client.check_win(tid)
-                
-                trades += 1
-                if win:
-                    wins += 1
-                    pnl = BASE_AMOUNT * 0.85
-                    total_pnl += pnl
-                    print(f"✅ WIN! +${pnl:.2f}")
-                else:
-                    total_pnl -= BASE_AMOUNT
-                    print(f"❌ LOSS! -${BASE_AMOUNT:.2f}")
-                
-                nb = await client.get_balance()
-                wr = (wins/trades*100) if trades else 0
-                print(f"📊 ট্রেড {trades} | উইন {wins} ({wr:.0f}%) | PnL ${total_pnl:.2f} | Bal ${nb:.2f}")
-                
-            except Exception as e:
-                print(f"❌ এরর: {e}")
-    
-    except KeyboardInterrupt:
-        print("\n🛑 বন্ধ।")
+        async with aiohttp.ClientSession() as s:
+            async with s.get(url, timeout=aiohttp.ClientTimeout(total=12)) as r:
+                data = (await r.json(content_type=None)).get("data", [])
+        return sorted(data, key=lambda k: int(k.get("epoch", 0)))
     except Exception as e:
-        print(f"\n❌ বট এরর: {e}")
-    finally:
-        try:
-            await client.stop_candles_stream(ASSET)
-            await client.close()
-        except:
-            pass
-        print("\n=== শেষ ===")
+        print("fetch error:", e)
+        return []
 
-await run_bot()
+
+# ==================== TELEGRAM INTERFACE ====================
+def home_kb():
+    return M([[B("📊 New Signal", callback_data="pairs")],
+              [B("👤 Profile", callback_data="profile")]])
+
+
+async def run_signal(ctx: ContextTypes.DEFAULT_TYPE, chat_id: int, uid: int, pair: str):
+    try:
+        candles = await fetch_candles(pair)
+        direction, score, info = analyze(candles)
+        name = pair.replace("_otc", "")
+        if not candles:
+            await ctx.bot.send_message(chat_id, "❌ বাজার থেকে ডেটা পাওয়া যায়নি।", reply_markup=home_kb())
+            return
+        if direction is None:
+            await ctx.bot.send_message(
+                chat_id, f"⚪ {name}: NO TRADE\nमार्কেট পরিষ্কার নয় (Score: {score:+d})। অন্য পেয়ার চেক করুন।",
+                reply_markup=home_kb())
+            return
+
+        entry = (dt.datetime.now() + dt.timedelta(minutes=1)).replace(second=0, microsecond=0)
+        use_signal(uid)
+        icon = "🟢" if direction == "CALL" else "🔴"
+        
+        await ctx.bot.send_message(
+            chat_id,
+            f"👑 **Big_Brother_ai_signal**\n"
+            f"{icon} {name} OTC — {direction}\n"
+            f"⏰ Entry: {entry:%H:%M} | Expiry: M1\n"
+            f"📊 Strength Score: {score:+d}\n"
+            f"📈 RSI: {info['rsi']} | Reasons: {', '.join(info['why'])}\n\n⏳ ফলাফল যাচাই করা হচ্ছে...")
+
+        await asyncio.sleep(max(0, (entry + dt.timedelta(minutes=1, seconds=8) - dt.datetime.now()).total_seconds()))
+
+        res = await fetch_candles(pair, 10)
+        target = next((k for k in res if abs(int(k["epoch"]) - int(entry.timestamp())) <= 30), None)
+        if not target:
+            await ctx.bot.send_message(chat_id, "⚠️ রেজাল্ট ক্যান্ডেল পাওয়া যায়নি।", reply_markup=home_kb())
+            return
+        o, cl = float(target["open"]), float(target["close"])
+        win = cl > o if direction == "CALL" else cl < o
+        add_result(uid, win)
+        
+        await ctx.bot.send_message(chat_id, f"{'✅ WIN' if win else '❌ LOSS'} — {name} {direction}\n"
+                                            f"Open: {o} → Close: {cl}", reply_markup=home_kb())
+    finally:
+        busy.pop(uid, None)
+
+
+async def on_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    u = update.effective_user
+    get_user(u.id, u.full_name)
+    await update.message.reply_text(
+        "👋 স্বাগতম **Smart Market Analysis Bot**-এ!\n"
+        "প্রস্তুতকর্তა: **Big_Brother_ai_signal**\n\n"
+        "📊 Technical Analysis • SMC • MMC • Price Action\n"
+        "⚡ ডেমো অ্যাকাউন্টে টেস্ট করে মার্কেটে ট্রেড করুন।", reply_markup=home_kb(), parse_mode="Markdown")
+
+
+async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    q = update.callback_query
+    u = q.from_user
+    user = get_user(u.id, u.full_name)
+    await q.answer()
+    chat_id = q.message.chat_id
+
+    if q.data == "pairs":
+        rows = [[B(p.replace("_otc", ""), callback_data=f"p_{p}") for p in PAIRS[i:i + 2]]
+                for i in range(0, len(PAIRS), 2)]
+        await ctx.bot.send_message(chat_id, "💎 পেয়ার সিলেক্ট করুন:", reply_markup=M(rows))
+
+    elif q.data.startswith("p_"):
+        if busy.get(u.id):
+            await q.answer("⏳ আগের সিগন্যালের ফলাফল আসা পর্যন্ত অপেক্ষা করুন", show_alert=True)
+            return
+        if user["daily"] >= limit_for(user):
+            await ctx.bot.send_message(chat_id, "❌ আজকের দৈনিক সিগন্যাল লিমিট শেষ।")
+            return
+        busy[u.id] = True
+        await ctx.bot.send_message(chat_id, "🔍 SMC, MMC এবং Price Action বিশ্লেষণ করা হচ্ছে...")
+        asyncio.create_task(run_signal(ctx, chat_id, u.id, q.data[2:]))
+
+    elif q.data == "profile":
+        t = user["wins"] + user["losses"]
+        wr = round(user["wins"] / t * 100, 1) if t else 0
+        plan = "ADMIN" if u.id in ADMIN_IDS else "PREMIUM" if is_premium(user) else "FREE"
+        lim = "∞" if u.id in ADMIN_IDS else limit_for(user)
+        await ctx.bot.send_message(
+            chat_id, f"👤 {user['name']}\n🆔 {u.id}\n👑 Brand: Big_Brother_ai_signal\n💎 Plan: {plan}\n"
+                     f"📊 আজ ব্যবহৃত: {user['daily']}/{lim}\n✅ Wins: {user['wins']} | ❌ Losses: {user['losses']} | Win Rate: {wr}%",
+            reply_markup=home_kb())
+
+
+async def on_addpremium(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMIN_IDS:
+        return
+    try:
+        uid, days = int(ctx.args[0]), int(ctx.args[1])
+    except (IndexError, ValueError):
+        await update.message.reply_text("Usage: /addpremium <user_id> <days>")
+        return
+    get_user(uid)
+    until = (dt.date.today() + dt.timedelta(days=days)).isoformat()
+    with db() as c:
+        c.execute("UPDATE users SET premium_until=? WHERE user_id=?", (until, uid))
+    await update.message.reply_text(f"✅ User {uid} granted premium until {until}")
+
+
+async def on_users(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id not in ADMIN_IDS:
+        return
+    with db() as c:
+        n = c.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+    await update.message.reply_text(f"👥 Total Users: {n}")
+
+
+def main():
+    setup_db()
+    app = Application.builder().token(BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", on_start))
+    app.add_handler(CommandHandler("addpremium", on_addpremium))
+    app.add_handler(CommandHandler("users", on_users))
+    app.add_handler(CallbackQueryHandler(on_callback))
+    print("✅ Smart Market Analysis Bot (Big_Brother_ai_signal) started successfully!")
+    app.run_polling(drop_pending_updates=True)
+
+
+if __name__ == "__main__":
+    main()
